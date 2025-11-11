@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inspeksi - Tabel Semua</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif; background:#f3f4f6; margin:0; padding:20px}
+  .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
+  h1{margin-top:0}
+  .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  input, select{padding:8px;border:1px solid #ccc;border-radius:6px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{padding:8px;border:1px solid #e2e8f0;text-align:left;font-size:14px}
+  th{background:#0ea5b6;color:#fff}
+  .small{font-size:13px;color:#666}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Semua Data Inspeksi</h1>
+    <div class="controls">
+      <input id="filterCabang" placeholder="Filter cabang (kosong=semua)" />
+      <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)" />
+      <button id="btnRefresh">Refresh</button>
+      <span class="small">Data berasal dari Apps Script API</span>
+    </div>
+
+    <div id="status" class="small">Memuat...</div>
+    <div style="overflow:auto">
+      <table id="tbl">
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+/* Konfigurasi: GANTI DENGAN WEB APP URL dan API KEY Anda */
+const API_URL = "https://script.google.com/macros/s/AKfycbwVltN2jgyB9o4vVmUwZlCCpwqxquV6nT1jMSGziHBt0XTzf8Klz6gKFRz3uYw_EsLs/exec"; // <-- GANTI
+const API_KEY = "Log-2025"; // <-- GANTI
+
+async function fetchApi(params = {}) {
+  params.apiKey = API_KEY;
+  const qs = new URLSearchParams(params).toString();
+  const url = API_URL + "?" + qs;
+  const res = await fetch(url);
+  const j = await res.json();
+  if (!j.success && j.error) throw new Error(j.error);
+  return j;
+}
+
+async function loadAll() {
+  document.getElementById('status').textContent = 'Memuat...';
+  try {
+    const cabang = document.getElementById('filterCabang').value.trim();
+    const plat = document.getElementById('filterPlat').value.trim();
+    let data;
+    if (cabang) {
+      data = await fetchApi({ action: 'getByCabang', cabang });
+      data = data.data;
+    } else if (plat) {
+      data = await fetchApi({ action: 'getByPlat', plat });
+      data = data.data;
+    } else {
+      data = await fetchApi({ action: 'getAll' });
+      data = data.data;
+    }
+
+    renderTable(data || []);
+    document.getElementById('status').textContent = 'Selesai. ' + (data?data.length:0) + ' baris.';
+  } catch (err) {
+    document.getElementById('status').textContent = 'Error: ' + err.message;
+    document.getElementById('thead').innerHTML = '';
+    document.getElementById('tbody').innerHTML = '';
+  }
+}
+
+function renderTable(rows) {
+  const thead = document.getElementById('thead');
+  const tbody = document.getElementById('tbody');
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+  if (!rows || rows.length === 0) {
+    thead.innerHTML = '<tr><th>Tidak ada data</th></tr>';
+    return;
+  }
+  // Use keys from first object
+  const keys = Object.keys(rows[0]);
+  const trh = document.createElement('tr');
+  keys.forEach(k => {
+    const th = document.createElement('th');
+    th.textContent = k;
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    keys.forEach(k => {
+      const td = document.createElement('td');
+      td.textContent = (r[k] !== undefined && r[k] !== null) ? r[k] : '';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('btnRefresh').addEventListener('click', loadAll);
+document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
+document.getElementById('filterPlat').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
+
+// initial load
+loadAll();
+</script>
+</body>
+</html>
