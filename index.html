@@ -3,18 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inspeksi - Tabel Semua</title>
+<title>Inspeksi - Tabel Semua (Dengan Filter Tanggal)</title>
 <style>
   body{font-family:Arial,Helvetica,sans-serif; background:#f3f4f6; margin:0; padding:20px}
   .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
   h1{margin-top:0}
-  .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-  input, select, button{padding:8px;border:1px solid #ccc;border-radius:6px}
+  .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  input[type=text], input[type=date], select, button{padding:8px;border:1px solid #ccc;border-radius:6px}
+  button{cursor:pointer}
   table{width:100%;border-collapse:collapse;margin-top:10px}
   th,td{padding:8px;border:1px solid #e2e8f0;text-align:left;font-size:14px}
   th{background:#0ea5b6;color:#fff}
   .small{font-size:13px;color:#666}
   .nowrap { white-space: nowrap; }
+  .pagination {display:flex;justify-content:center;align-items:center;gap:10px;margin-top:10px;font-size:14px}
+  .pagination button {padding:5px 10px;border:1px solid #ccc;border-radius:5px;background:#eee;cursor:pointer;}
+  .pagination button:hover {background:#ddd;}
+  .pagination span {color:#444;}
+  @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} }
 </style>
 </head>
 <body>
@@ -23,7 +29,15 @@
     <div class="controls">
       <input id="filterCabang" placeholder="Filter cabang (kosong=semua)" />
       <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)" />
-      <button id="btnRefresh">Refresh</button>
+      <label style="display:flex;gap:6px;align-items:center;">
+        Dari
+        <input id="filterFrom" type="date" />
+      </label>
+      <label style="display:flex;gap:6px;align-items:center;">
+        Sampai
+        <input id="filterTo" type="date" />
+      </label>
+      <button id="btnRefresh">Refresh / Apply</button>
       <span class="small">Data berasal dari Apps Script API</span>
     </div>
 
@@ -34,12 +48,23 @@
         <tbody id="tbody"></tbody>
       </table>
     </div>
+
+    <div class="pagination" id="pagination" style="display:none;">
+      <button id="prevPage">« Prev</button>
+      <span id="pageInfo">Halaman 1 dari 1</span>
+      <button id="nextPage">Next »</button>
+    </div>
   </div>
 
 <script>
 /* CONFIG: ganti API_URL dan API_KEY sesuai deployment Apps Script Anda */
-const API_URL = "https://script.google.com/macros/s/AKfycbycbKE7u3EQKfJe7R8tIfp7AARJvD_HTefP5N0eGI3zdYVglAn8-r6U2Z7Ugjs0ULwd/exec"; // <-- GANTI dgn URL web app (doGet)
-const API_KEY = "KEY-2025"; // <-- GANTI dgn API_KEY yg ada di Code.gs
+const API_URL = "https://script.google.com/macros/s/AKfycbycbKE7u3EQKfJe7R8tIfp7AARJvD_HTefP5N0eGI3zdYVglAn8-r6U2Z7Ugjs0ULwd/exec"; // <-- GANTI
+const API_KEY = "KEY-2025"; // <-- GANTI
+
+const ROWS_PER_PAGE = 50;
+let rawRows = [];       // data asli dari API
+let filteredRows = [];  // data setelah filter (plat/cabang/tanggal)
+let currentPage = 1;
 
 async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
@@ -53,12 +78,14 @@ async function fetchApi(params = {}) {
 }
 
 async function loadAll() {
-  const status = document.getElementById('status');
-  status.textContent = 'Memuat...';
+  document.getElementById('status').textContent = 'Memuat...';
+  document.getElementById('pagination').style.display = 'none';
   try {
     const cabang = document.getElementById('filterCabang').value.trim();
     const plat = document.getElementById('filterPlat').value.trim();
     let data;
+
+    // Pilih action yang sesuai (getByCabang/getByPlat/getAll) — jika Anda punya API endpoint lain, sesuaikan
     if (cabang) {
       const res = await fetchApi({ action: 'getByCabang', cabang });
       data = res.data;
@@ -70,27 +97,109 @@ async function loadAll() {
       data = res.data;
     }
 
-    renderTable(data || []);
-    status.textContent = 'Selesai. ' + (data ? data.length : 0) + ' baris.';
+    rawRows = data || [];
+    applyAllFilters(); // filter cabang/plat/tanggal & render
+    document.getElementById('status').textContent = 'Selesai. ' + rawRows.length + ' baris (sumber).';
   } catch (err) {
     document.getElementById('status').textContent = 'Error: ' + (err.message || err);
     document.getElementById('thead').innerHTML = '';
     document.getElementById('tbody').innerHTML = '';
+    document.getElementById('pagination').style.display = 'none';
     console.error(err);
   }
 }
 
-function renderTable(rows) {
+/* Terapkan semua filter client-side: cabang/plat sudah dipakai saat fetch di API jika ada,
+   tapi kita juga filter tanggal di sini (dan double-check jika user memasukkan kedua filter sekaligus) */
+function applyAllFilters() {
+  // start from rawRows
+  filteredRows = rawRows.slice();
+
+  // Additional client-side filtering by cabang/plat if user entered both (safe)
+  const cabang = document.getElementById('filterCabang').value.trim().toLowerCase();
+  const plat = document.getElementById('filterPlat').value.trim().toLowerCase();
+  if (cabang) {
+    filteredRows = filteredRows.filter(r => (String(r['Cabang']||r['cabang']||'')).toLowerCase().includes(cabang));
+  }
+  if (plat) {
+    filteredRows = filteredRows.filter(r => (String(r['Nomor Polisi']||r['NomorPolisi']||r['nomorPolisi']||r['plat']||'')).toLowerCase().includes(plat));
+  }
+
+  // Date range filtering
+  const fromVal = document.getElementById('filterFrom').value;
+  const toVal   = document.getElementById('filterTo').value;
+  if (fromVal || toVal) {
+    const fromDate = fromVal ? parseDateOnly(fromVal) : null;
+    const toDate   = toVal ? parseDateOnly(toVal) : null; // inclusive
+
+    filteredRows = filteredRows.filter(row => {
+      // find the date field - try several common keys
+      const dateCandidates = ['Tanggal','tanggal','Tgl','tgl','Date','date'];
+      let cell = null;
+      for (const k of dateCandidates) {
+        if (row[k] !== undefined) { cell = row[k]; break; }
+      }
+      if (cell === null) return false; // no date -> exclude
+
+      const rowDate = parseDateFromCell(cell);
+      if (!rowDate) return false;
+
+      // compare only YYYY-MM-DD (no time)
+      const d = parseDateOnly(formatISOForComparison(rowDate));
+
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+      return true;
+    });
+  }
+
+  // reset pagination and render
+  currentPage = 1;
+  renderTablePage();
+}
+
+/* Helpers */
+function parseDateFromCell(cell) {
+  // cell may be ISO string '2025-10-27T17:00:00.000Z' or Date object or '2025-10-27'
+  try {
+    if (cell instanceof Date) return cell;
+    // If it's number (Excel serial) -> try to coerce (rare)
+    if (typeof cell === 'number') return new Date(Math.round((cell - 25569) * 86400 * 1000));
+    const d = new Date(String(cell));
+    if (!isNaN(d)) return d;
+    return null;
+  } catch (e) { return null; }
+}
+
+// format row date into 'yyyy-mm-dd' for parseDateOnly
+function formatISOForComparison(d) {
+  const year = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${year}-${m}-${dd}`;
+}
+
+function parseDateOnly(yyyy_mm_dd) {
+  // input: '2025-10-28' -> returns Date at midnight local
+  const parts = yyyy_mm_dd.split('-');
+  if (parts.length < 3) return null;
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+}
+
+function renderTablePage() {
   const thead = document.getElementById('thead');
   const tbody = document.getElementById('tbody');
   thead.innerHTML = '';
   tbody.innerHTML = '';
-  if (!rows || rows.length === 0) {
+
+  if (!filteredRows || filteredRows.length === 0) {
     thead.innerHTML = '<tr><th>Tidak ada data</th></tr>';
+    document.getElementById('pagination').style.display = 'none';
     return;
   }
-  // Use keys from first object (preserve order)
-  const keys = Object.keys(rows[0]);
+
+  // keys from first row (preserve order)
+  const keys = Object.keys(filteredRows[0]);
   const trh = document.createElement('tr');
   keys.forEach(k => {
     const th = document.createElement('th');
@@ -99,38 +208,67 @@ function renderTable(rows) {
   });
   thead.appendChild(trh);
 
-  rows.forEach(r => {
+  const start = (currentPage - 1) * ROWS_PER_PAGE;
+  const end = start + ROWS_PER_PAGE;
+  const pageRows = filteredRows.slice(start, end);
+
+  pageRows.forEach(r => {
     const tr = document.createElement('tr');
     keys.forEach(k => {
       const td = document.createElement('td');
       let v = (r[k] !== undefined && r[k] !== null) ? r[k] : '';
-      // if looks like ISO datetime, format to dd/mm/yyyy
+      // if ISO date-like -> format dd/mm/yyyy
       if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
         v = formatISOToDMY(v);
+      } else if (v instanceof Date) {
+        v = formatDateToDMY(v);
       }
       td.textContent = v;
-      if (k.toLowerCase().includes('tanggal') || k.toLowerCase().includes('tgl')) td.classList.add('nowrap');
+      if (String(k).toLowerCase().includes('tanggal') || String(k).toLowerCase().includes('tgl')) td.classList.add('nowrap');
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
   });
+
+  const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE);
+  document.getElementById('pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('pageInfo').textContent = `Halaman ${currentPage} dari ${totalPages}`;
+  document.getElementById('prevPage').disabled = currentPage === 1;
+  document.getElementById('nextPage').disabled = currentPage === totalPages;
 }
 
-// helper to format ISO-> dd/mm/yyyy
 function formatISOToDMY(s) {
   try {
     const d = new Date(s);
     if (isNaN(d)) return s;
-    const dd = String(d.getDate()).padStart(2,'0');
-    const mm = String(d.getMonth()+1).padStart(2,'0');
-    const yy = d.getFullYear();
-    return dd + '/' + mm + '/' + yy;
+    return formatDateToDMY(d);
   } catch (e) { return s; }
 }
+function formatDateToDMY(d) {
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = d.getFullYear();
+  return dd + '/' + mm + '/' + yy;
+}
 
-document.getElementById('btnRefresh').addEventListener('click', loadAll);
+/* Event bindings */
+document.getElementById('btnRefresh').addEventListener('click', () => {
+  // If user provided only cabang/plat, we already fetch filtered from API.
+  // But still always fetch to get fresh rawRows, then applyAllFilters (incl. date).
+  loadAll();
+});
 document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
 document.getElementById('filterPlat').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
+document.getElementById('filterFrom').addEventListener('change', ()=> applyAllFilters());
+document.getElementById('filterTo').addEventListener('change', ()=> applyAllFilters());
+
+document.getElementById('prevPage').addEventListener('click', ()=>{
+  if (currentPage > 1) { currentPage--; renderTablePage(); window.scrollTo(0,0); }
+});
+document.getElementById('nextPage').addEventListener('click', ()=>{
+  const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE);
+  if (currentPage < totalPages) { currentPage++; renderTablePage(); window.scrollTo(0,0); }
+});
 
 // initial load
 loadAll();
