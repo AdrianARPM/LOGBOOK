@@ -9,11 +9,12 @@
   .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
   h1{margin-top:0}
   .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-  input, select{padding:8px;border:1px solid #ccc;border-radius:6px}
+  input, select, button{padding:8px;border:1px solid #ccc;border-radius:6px}
   table{width:100%;border-collapse:collapse;margin-top:10px}
   th,td{padding:8px;border:1px solid #e2e8f0;text-align:left;font-size:14px}
   th{background:#0ea5b6;color:#fff}
   .small{font-size:13px;color:#666}
+  .nowrap { white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -36,43 +37,46 @@
   </div>
 
 <script>
-/* Konfigurasi: GANTI DENGAN WEB APP URL dan API KEY Anda */
-const API_URL = "https://script.google.com/macros/s/AKfycbycbKE7u3EQKfJe7R8tIfp7AARJvD_HTefP5N0eGI3zdYVglAn8-r6U2Z7Ugjs0ULwd/exec"; // <-- GANTI
-const API_KEY = "KEY-2025"; // <-- GANTI
+/* CONFIG: ganti API_URL dan API_KEY sesuai deployment Apps Script Anda */
+const API_URL = "https://script.google.com/macros/s/AKfycbycbKE7u3EQKfJe7R8tIfp7AARJvD_HTefP5N0eGI3zdYVglAn8-r6U2Z7Ugjs0ULwd/exec"; // <-- GANTI dgn URL web app (doGet)
+const API_KEY = "KEY-2025"; // <-- GANTI dgn API_KEY yg ada di Code.gs
 
 async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
   const qs = new URLSearchParams(params).toString();
   const url = API_URL + "?" + qs;
   const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   const j = await res.json();
-  if (!j.success && j.error) throw new Error(j.error);
+  if (!j.success) throw new Error(j.error || 'API returned success=false');
   return j;
 }
 
 async function loadAll() {
-  document.getElementById('status').textContent = 'Memuat...';
+  const status = document.getElementById('status');
+  status.textContent = 'Memuat...';
   try {
     const cabang = document.getElementById('filterCabang').value.trim();
     const plat = document.getElementById('filterPlat').value.trim();
     let data;
     if (cabang) {
-      data = await fetchApi({ action: 'getByCabang', cabang });
-      data = data.data;
+      const res = await fetchApi({ action: 'getByCabang', cabang });
+      data = res.data;
     } else if (plat) {
-      data = await fetchApi({ action: 'getByPlat', plat });
-      data = data.data;
+      const res = await fetchApi({ action: 'getByPlat', plat });
+      data = res.data;
     } else {
-      data = await fetchApi({ action: 'getAll' });
-      data = data.data;
+      const res = await fetchApi({ action: 'getAll' });
+      data = res.data;
     }
 
     renderTable(data || []);
-    document.getElementById('status').textContent = 'Selesai. ' + (data?data.length:0) + ' baris.';
+    status.textContent = 'Selesai. ' + (data ? data.length : 0) + ' baris.';
   } catch (err) {
-    document.getElementById('status').textContent = 'Error: ' + err.message;
+    document.getElementById('status').textContent = 'Error: ' + (err.message || err);
     document.getElementById('thead').innerHTML = '';
     document.getElementById('tbody').innerHTML = '';
+    console.error(err);
   }
 }
 
@@ -85,7 +89,7 @@ function renderTable(rows) {
     thead.innerHTML = '<tr><th>Tidak ada data</th></tr>';
     return;
   }
-  // Use keys from first object
+  // Use keys from first object (preserve order)
   const keys = Object.keys(rows[0]);
   const trh = document.createElement('tr');
   keys.forEach(k => {
@@ -99,11 +103,29 @@ function renderTable(rows) {
     const tr = document.createElement('tr');
     keys.forEach(k => {
       const td = document.createElement('td');
-      td.textContent = (r[k] !== undefined && r[k] !== null) ? r[k] : '';
+      let v = (r[k] !== undefined && r[k] !== null) ? r[k] : '';
+      // if looks like ISO datetime, format to dd/mm/yyyy
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+        v = formatISOToDMY(v);
+      }
+      td.textContent = v;
+      if (k.toLowerCase().includes('tanggal') || k.toLowerCase().includes('tgl')) td.classList.add('nowrap');
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
   });
+}
+
+// helper to format ISO-> dd/mm/yyyy
+function formatISOToDMY(s) {
+  try {
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yy = d.getFullYear();
+    return dd + '/' + mm + '/' + yy;
+  } catch (e) { return s; }
 }
 
 document.getElementById('btnRefresh').addEventListener('click', loadAll);
