@@ -48,13 +48,7 @@
 
     <div class="panel grid" style="align-items:center">
       <div>
-        <h3>Cek driver yang belum mengisi (per tanggal)</h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input id="missingDate" type="date" />
-          <button id="btnMissingByDate">Tampilkan yang belum mengisi</button>
-          <button id="btnMissingByDateTable">Tulis hasil ke tabel (client)</button>
-          <button id="btnDownloadMissingByDateCSV">Download CSV</button>
-        </div>
+        
         <label style="display:flex;gap:8px;align-items:center;margin-top:6px;">
           <input id="excludeSundays" type="checkbox" /> <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
         </label>
@@ -101,7 +95,7 @@
 
 <script>
 /* CONFIG: ganti API_URL dan API_KEY sesuai deployment Apps Script Anda */
-const API_URL = "https://script.google.com/macros/s/AKfycbxnu_EtjPv44-Mw_v0FJs4brjqyVXMhbqL9bk3DcKpJ0iikAa3Owcuq5vVinwwfs2Ct/exec"; // <-- GANTI
+const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec"; // <-- GANTI
 const API_KEY = "KEY-2025"; // <-- GANTI
 
 const ROWS_PER_PAGE = 50;
