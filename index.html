@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inspeksi - Tabel Semua (Dengan Filter Tanggal)</title>
+<title>Inspeksi - Tabel Semua (Dengan Filter Tanggal & Missing Report)</title>
 <style>
   body{font-family:Arial,Helvetica,sans-serif; background:#f3f4f6; margin:0; padding:20px}
   .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
   h1{margin-top:0}
   .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
-  input[type=text], input[type=date], select, button{padding:8px;border:1px solid #ccc;border-radius:6px}
+  input[type=text], input[type=date], input[type=number], select, button{padding:8px;border:1px solid #ccc;border-radius:6px}
   button{cursor:pointer}
   table{width:100%;border-collapse:collapse;margin-top:10px}
   th,td{padding:8px;border:1px solid #e2e8f0;text-align:left;font-size:14px}
@@ -20,12 +20,18 @@
   .pagination button {padding:5px 10px;border:1px solid #ccc;border-radius:5px;background:#eee;cursor:pointer;}
   .pagination button:hover {background:#ddd;}
   .pagination span {color:#444;}
+  .panel {margin-top:18px;padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee}
+  .panel h3 {margin:0 0 8px 0}
+  .missing-list {max-height:300px;overflow:auto;border:1px dashed #e5e7eb;padding:8px;border-radius:6px;background:#fff}
+  .grid {display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
   @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} }
 </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Semua Data Inspeksi</h1>
+
     <div class="controls">
       <input id="filterCabang" placeholder="Filter cabang (kosong=semua)" />
       <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)" />
@@ -41,8 +47,32 @@
       <span class="small">Data berasal dari Apps Script API</span>
     </div>
 
+    <!-- NEW: Controls for missing-driver reports -->
+    <div class="panel grid" style="align-items:center">
+      <div>
+        <h3>Cek driver yang belum mengisi (per tanggal)</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="missingDate" type="date" />
+          <button id="btnMissingByDate">Tampilkan yang belum mengisi</button>
+          <button id="btnMissingByDateTable">Tulis hasil ke tabel (client)</button>
+        </div>
+        <div class="small" style="margin-top:6px">Gunakan tombol di kanan untuk memanggil endpoint <code>missingByDate</code>.</div>
+      </div>
+
+      <div>
+        <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px" />
+          <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
+          <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel (client)</button>
+        </div>
+        <div class="small" style="margin-top:6px">Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.</div>
+      </div>
+    </div>
+
     <div id="status" class="small">Memuat...</div>
-    <div style="overflow:auto">
+
+    <div style="overflow:auto;margin-top:12px">
       <table id="tbl">
         <thead id="thead"></thead>
         <tbody id="tbody"></tbody>
@@ -54,11 +84,19 @@
       <span id="pageInfo">Halaman 1 dari 1</span>
       <button id="nextPage">Next »</button>
     </div>
+
+    <!-- Missing results panel -->
+    <div class="panel" id="missingResults" style="display:none">
+      <h3>Hasil — Driver yang belum mengisi</h3>
+      <div id="missingSummary" class="small"></div>
+      <div id="missingContent" style="margin-top:8px"></div>
+    </div>
+
   </div>
 
 <script>
 /* CONFIG: ganti API_URL dan API_KEY sesuai deployment Apps Script Anda */
-const API_URL = "https://script.google.com/macros/s/AKfycbycbKE7u3EQKfJe7R8tIfp7AARJvD_HTefP5N0eGI3zdYVglAn8-r6U2Z7Ugjs0ULwd/exec"; // <-- GANTI
+const API_URL = "https://script.google.com/macros/s/AKfycbzCHp9hXZCKxrHbCEgm2xPL7bA_moK1zZcgJ5c7sAD8261Y1ZDCEaKhOkWCJAIYqXv5/exec"; // <-- GANTI
 const API_KEY = "KEY-2025"; // <-- GANTI
 
 const ROWS_PER_PAGE = 50;
@@ -85,7 +123,7 @@ async function loadAll() {
     const plat = document.getElementById('filterPlat').value.trim();
     let data;
 
-    // Pilih action yang sesuai (getByCabang/getByPlat/getAll) — jika Anda punya API endpoint lain, sesuaikan
+    // Pilih action yang sesuai (getByCabang/getByPlat/getAll)
     if (cabang) {
       const res = await fetchApi({ action: 'getByCabang', cabang });
       data = res.data;
@@ -109,13 +147,10 @@ async function loadAll() {
   }
 }
 
-/* Terapkan semua filter client-side: cabang/plat sudah dipakai saat fetch di API jika ada,
-   tapi kita juga filter tanggal di sini (dan double-check jika user memasukkan kedua filter sekaligus) */
+/* Terapkan semua filter client-side */
 function applyAllFilters() {
-  // start from rawRows
   filteredRows = rawRows.slice();
 
-  // Additional client-side filtering by cabang/plat if user entered both (safe)
   const cabang = document.getElementById('filterCabang').value.trim().toLowerCase();
   const plat = document.getElementById('filterPlat').value.trim().toLowerCase();
   if (cabang) {
@@ -133,59 +168,46 @@ function applyAllFilters() {
     const toDate   = toVal ? parseDateOnly(toVal) : null; // inclusive
 
     filteredRows = filteredRows.filter(row => {
-      // find the date field - try several common keys
-      const dateCandidates = ['Tanggal','tanggal','Tgl','tgl','Date','date'];
+      const dateCandidates = ['Tanggal','tanggal','Tgl','tgl','Date','date','Timestamp'];
       let cell = null;
       for (const k of dateCandidates) {
         if (row[k] !== undefined) { cell = row[k]; break; }
       }
-      if (cell === null) return false; // no date -> exclude
-
+      if (cell === null) return false;
       const rowDate = parseDateFromCell(cell);
       if (!rowDate) return false;
-
-      // compare only YYYY-MM-DD (no time)
       const d = parseDateOnly(formatISOForComparison(rowDate));
-
       if (fromDate && d < fromDate) return false;
       if (toDate && d > toDate) return false;
       return true;
     });
   }
 
-  // reset pagination and render
   currentPage = 1;
   renderTablePage();
 }
 
-/* Helpers */
+/* Helpers (sama seperti sebelumnya) */
 function parseDateFromCell(cell) {
-  // cell may be ISO string '2025-10-27T17:00:00.000Z' or Date object or '2025-10-27'
   try {
     if (cell instanceof Date) return cell;
-    // If it's number (Excel serial) -> try to coerce (rare)
     if (typeof cell === 'number') return new Date(Math.round((cell - 25569) * 86400 * 1000));
     const d = new Date(String(cell));
     if (!isNaN(d)) return d;
     return null;
   } catch (e) { return null; }
 }
-
-// format row date into 'yyyy-mm-dd' for parseDateOnly
 function formatISOForComparison(d) {
   const year = d.getFullYear();
   const m = String(d.getMonth()+1).padStart(2,'0');
   const dd = String(d.getDate()).padStart(2,'0');
   return `${year}-${m}-${dd}`;
 }
-
 function parseDateOnly(yyyy_mm_dd) {
-  // input: '2025-10-28' -> returns Date at midnight local
   const parts = yyyy_mm_dd.split('-');
   if (parts.length < 3) return null;
   return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
 }
-
 function renderTablePage() {
   const thead = document.getElementById('thead');
   const tbody = document.getElementById('tbody');
@@ -198,7 +220,6 @@ function renderTablePage() {
     return;
   }
 
-  // keys from first row (preserve order)
   const keys = Object.keys(filteredRows[0]);
   const trh = document.createElement('tr');
   keys.forEach(k => {
@@ -217,7 +238,6 @@ function renderTablePage() {
     keys.forEach(k => {
       const td = document.createElement('td');
       let v = (r[k] !== undefined && r[k] !== null) ? r[k] : '';
-      // if ISO date-like -> format dd/mm/yyyy
       if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
         v = formatISOToDMY(v);
       } else if (v instanceof Date) {
@@ -236,7 +256,6 @@ function renderTablePage() {
   document.getElementById('prevPage').disabled = currentPage === 1;
   document.getElementById('nextPage').disabled = currentPage === totalPages;
 }
-
 function formatISOToDMY(s) {
   try {
     const d = new Date(s);
@@ -251,12 +270,136 @@ function formatDateToDMY(d) {
   return dd + '/' + mm + '/' + yy;
 }
 
-/* Event bindings */
-document.getElementById('btnRefresh').addEventListener('click', () => {
-  // If user provided only cabang/plat, we already fetch filtered from API.
-  // But still always fetch to get fresh rawRows, then applyAllFilters (incl. date).
-  loadAll();
-});
+/* ------------------------
+  New: functions to call missing endpoints and render
+   - missingByDate -> returns array of missing names
+   - missingLastNDays -> returns object { missingAll, perDriverMissingDays }
+   We display results in #missingResults panel.
+   Also provide option to write result into a small client-side table below the main table.
+-------------------------*/
+
+async function fetchMissingByDate(dateIso) {
+  // dateIso: 'yyyy-mm-dd' (from <input type=date>)
+  if (!dateIso) throw new Error('Pilih tanggal terlebih dahulu.');
+  // convert to dd/mm/yyyy for API compatibility (server parses many formats but keep friendly)
+  const parts = dateIso.split('-');
+  const ddmmy = parts[2] + '/' + parts[1] + '/' + parts[0];
+  const res = await fetchApi({ action: 'missingByDate', date: ddmmy });
+  return res; // res.missing = [...]
+}
+
+async function fetchMissingLastNDays(n) {
+  if (!n || isNaN(n) || n < 1) n = 7;
+  const res = await fetchApi({ action: 'missingLastNDays', n: String(n) });
+  return res; // res.result = { missingAll, perDriverMissingDays }
+}
+
+function showMissingList(dateStr, missingArray) {
+  document.getElementById('missingResults').style.display = 'block';
+  document.getElementById('missingSummary').textContent = `Tanggal: ${dateStr} — Jumlah yang belum mengisi: ${missingArray.length}`;
+  const content = document.getElementById('missingContent');
+  content.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'missing-list';
+  if (missingArray.length === 0) {
+    box.innerHTML = '<div class="small">Semua driver terisi pada tanggal ini.</div>';
+  } else {
+    const ul = document.createElement('ul');
+    missingArray.forEach(name => {
+      const li = document.createElement('li');
+      li.textContent = name;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  content.appendChild(box);
+}
+
+function showMissingLastNDays(n, resultObj) {
+  document.getElementById('missingResults').style.display = 'block';
+  const missingAll = resultObj.missingAll || [];
+  document.getElementById('missingSummary').textContent = `Periode: last ${n} hari — yg sama sekali tidak submit: ${missingAll.length}`;
+  const content = document.getElementById('missingContent');
+  content.innerHTML = '';
+
+  // show missingAll as first block
+  const allBlock = document.createElement('div');
+  allBlock.style.marginBottom = '8px';
+  allBlock.innerHTML = '<strong>Driver tidak submit sama sekali selama periode:</strong>';
+  if (missingAll.length === 0) {
+    allBlock.innerHTML += ' <span class="small">Tidak ada</span>';
+  } else {
+    const ul = document.createElement('ul');
+    missingAll.forEach(d => { const li = document.createElement('li'); li.textContent = d; ul.appendChild(li); });
+    allBlock.appendChild(ul);
+  }
+  content.appendChild(allBlock);
+
+  // per-driver missing days table (collapsible)
+  const per = resultObj.perDriverMissingDays || {};
+  const table = document.createElement('table');
+  table.style.marginTop = '10px';
+  const trh = document.createElement('tr');
+  trh.innerHTML = '<th>Driver</th><th>Missing Days</th><th>Total Missing</th>';
+  table.appendChild(trh);
+  for (const driver in per) {
+    const days = per[driver];
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = driver;
+    const td2 = document.createElement('td'); td2.textContent = days.join(', ');
+    const td3 = document.createElement('td'); td3.textContent = days.length;
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    table.appendChild(tr);
+  }
+  content.appendChild(table);
+}
+
+/* Optionally write missing results as a small client-side table under main table */
+function writeMissingByDateToTable(dateStr, missingArray) {
+  // append a small header row into the main table area (client-side only)
+  const thead = document.getElementById('thead');
+  const tbody = document.getElementById('tbody');
+  // clear table and write a single column table listing missing drivers
+  thead.innerHTML = '<tr><th>Driver yang belum mengisi pada ' + dateStr + '</th></tr>';
+  tbody.innerHTML = '';
+  if (missingArray.length === 0) {
+    tbody.innerHTML = '<tr><td>Semua driver terisi pada tanggal ini.</td></tr>';
+  } else {
+    missingArray.forEach(name => {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td'); td.textContent = name;
+      tr.appendChild(td); tbody.appendChild(tr);
+    });
+  }
+  document.getElementById('pagination').style.display = 'none';
+}
+
+function writeMissingLastNDaysToTable(n, resultObj) {
+  const thead = document.getElementById('thead');
+  const tbody = document.getElementById('tbody');
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+  const keys = ['Driver','Missing Days','Total Missing'];
+  const trh = document.createElement('tr');
+  keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); });
+  thead.appendChild(trh);
+  const per = resultObj.perDriverMissingDays || {};
+  for (const drv in per) {
+    const days = per[drv];
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = drv;
+    const td2 = document.createElement('td'); td2.textContent = days.join(', ');
+    const td3 = document.createElement('td'); td3.textContent = days.length;
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    tbody.appendChild(tr);
+  }
+  document.getElementById('pagination').style.display = 'none';
+}
+
+/* ------------------------
+  Event bindings
+-------------------------*/
+document.getElementById('btnRefresh').addEventListener('click', loadAll);
 document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
 document.getElementById('filterPlat').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
 document.getElementById('filterFrom').addEventListener('change', ()=> applyAllFilters());
@@ -268,6 +411,53 @@ document.getElementById('prevPage').addEventListener('click', ()=>{
 document.getElementById('nextPage').addEventListener('click', ()=>{
   const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE);
   if (currentPage < totalPages) { currentPage++; renderTablePage(); window.scrollTo(0,0); }
+});
+
+document.getElementById('btnMissingByDate').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    const res = await fetchMissingByDate(dateIso);
+    // res.missing is array
+    const displayDate = dateIso ? (dateIso.split('-')[2] + '/' + dateIso.split('-')[1] + '/' + dateIso.split('-')[0]) : '—';
+    showMissingList(displayDate, res.missing || []);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingByDateTable').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    const res = await fetchMissingByDate(dateIso);
+    const displayDate = dateIso ? (dateIso.split('-')[2] + '/' + dateIso.split('-')[1] + '/' + dateIso.split('-')[0]) : '—';
+    writeMissingByDateToTable(displayDate, res.missing || []);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    showMissingLastNDays(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    writeMissingLastNDaysToTable(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
 });
 
 // initial load
