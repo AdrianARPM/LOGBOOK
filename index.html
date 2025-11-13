@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inspeksi - Missing Report + CSV (with Cabang & JSONP fallback)</title>
+<title>LOGBOOK — Missing (N hari)</title>
 <style>
-  body{font-family:Arial,Helvetica,sans-serif; background:#f3f4f6; margin:0; padding:20px}
+  body{font-family:Arial,Helvetica,sans-serif;background:#f3f4f6;margin:0;padding:20px}
   .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
   h1{margin-top:0}
   .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -16,61 +16,43 @@
   th{background:#0ea5b6;color:#fff}
   .small{font-size:13px;color:#666}
   .nowrap { white-space: nowrap; }
-  .pagination {display:flex;justify-content:center;align-items:center;gap:10px;margin-top:10px;font-size:14px}
-  .pagination button {padding:5px 10px;border:1px solid #ccc;border-radius:5px;background:#eee;cursor:pointer;}
   .panel {margin-top:18px;padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee}
-  .panel h3 {margin:0 0 8px 0}
   .missing-list {max-height:300px;overflow:auto;border:1px dashed #e5e7eb;padding:8px;border-radius:6px;background:#fff}
-  .grid {display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
+  .grid {display:grid;grid-template-columns:1fr;gap:12px}
+  .flexrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} }
   ul { margin: 8px 12px; padding-left: 18px; }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Semua Data Inspeksi</h1>
+    <h1>LOGBOOK — Cek Driver yang belum mengisi (N hari terakhir)</h1>
 
     <div class="controls">
       <input id="filterCabang" placeholder="Filter cabang (kosong=semua)" />
       <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)" />
-      <label style="display:flex;gap:6px;align-items:center;">
-        Dari
-        <input id="filterFrom" type="date" />
-      </label>
-      <label style="display:flex;gap:6px;align-items:center;">
-        Sampai
-        <input id="filterTo" type="date" />
-      </label>
       <button id="btnRefresh">Refresh / Apply</button>
       <span class="small">Data berasal dari Apps Script API</span>
     </div>
 
-    <div class="panel grid" style="align-items:center">
-      <div>
-        
-        <label style="display:flex;gap:8px;align-items:center;margin-top:6px;">
-          <input id="excludeSundays" type="checkbox" /> <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
+    <div class="panel">
+      <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
+      <div class="flexrow" style="margin-bottom:8px">
+        <label style="display:flex;gap:6px;align-items:center;">
+          N hari:
+          <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px;margin-left:6px" />
         </label>
-        <div class="small" style="margin-top:6px">Gunakan tombol di kanan untuk memanggil endpoint <code>missingByDate</code>.</div>
-      </div>
-
-      <div>
-        <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px" />
-          <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
-          <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel (client)</button>
-          <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
-        </div>
-        <label style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+        <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
+        <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel (client)</button>
+        <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
+        <label style="display:flex;gap:8px;align-items:center;margin-left:8px;">
           <input id="excludeSundays2" type="checkbox" /> <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
         </label>
-        <div class="small" style="margin-top:6px">Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.</div>
       </div>
+      <div class="small">Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.</div>
     </div>
 
-    <div id="status" class="small">Memuat...</div>
+    <div id="status" class="small" style="margin-top:12px">Memuat...</div>
 
     <div style="overflow:auto;margin-top:12px">
       <table id="tbl">
@@ -79,18 +61,11 @@
       </table>
     </div>
 
-    <div class="pagination" id="pagination" style="display:none;">
-      <button id="prevPage">« Prev</button>
-      <span id="pageInfo">Halaman 1 dari 1</span>
-      <button id="nextPage">Next »</button>
-    </div>
-
     <div class="panel" id="missingResults" style="display:none">
       <h3>Hasil — Driver yang belum mengisi</h3>
       <div id="missingSummary" class="small"></div>
       <div id="missingContent" style="margin-top:8px"></div>
     </div>
-
   </div>
 
 <script>
@@ -98,12 +73,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec"; // <-- GANTI
 const API_KEY = "KEY-2025"; // <-- GANTI
 
-const ROWS_PER_PAGE = 50;
-let rawRows = [];
-let filteredRows = [];
-let currentPage = 1;
-
-/* -------------------- JSONP fallback utility -------------------- */
+/* JSONP fallback (useful for GH Pages if CORS happens) */
 function jsonpFetch(url) {
   return new Promise((resolve, reject) => {
     const cb = 'cb_' + Math.random().toString(36).slice(2);
@@ -113,273 +83,82 @@ function jsonpFetch(url) {
     const script = document.createElement('script');
     script.src = url + (url.indexOf('?') === -1 ? '?' : '&') + 'callback=' + cb;
     script.onerror = function(err) {
-      delete window[cb];
-      script.remove();
-      reject(new Error('JSONP load error'));
+      delete window[cb]; script.remove(); reject(new Error('JSONP load error'));
     };
     document.head.appendChild(script);
   });
 }
 
-/* fetchApi: try fetch -> fallback to jsonpFetch */
+/* fetchApi: fetch then fallback to JSONP */
 async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
   const qs = new URLSearchParams(params).toString();
   const url = API_URL + "?" + qs;
   try {
     const res = await fetch(url, { method: 'GET', mode: 'cors' });
-    if (!res.ok) {
-      // fallback to JSONP
-      return await jsonpFetch(url);
-    }
+    if (!res.ok) return await jsonpFetch(url);
     const j = await res.json();
     if (j && (j.success === true || j.success === false)) return j;
-    // if response isn't JSON we expect, try JSONP
     return await jsonpFetch(url);
   } catch (err) {
-    // fallback to JSONP if CORS/network error
-    try {
-      return await jsonpFetch(url);
-    } catch (err2) {
-      throw err; // original
-    }
+    try { return await jsonpFetch(url); } catch (err2) { throw err; }
   }
 }
 
-/* -------------------- load / render table -------------------- */
+/* Load all (getAll / getByCabang / getByPlat) and render table (source data) */
+let rawRows = [];
 async function loadAll() {
   document.getElementById('status').textContent = 'Memuat...';
-  document.getElementById('pagination').style.display = 'none';
   try {
     const cabang = document.getElementById('filterCabang').value.trim();
     const plat = document.getElementById('filterPlat').value.trim();
-    let data;
-    if (cabang) {
-      const res = await fetchApi({ action: 'getByCabang', cabang });
-      data = res.data;
-    } else if (plat) {
-      const res = await fetchApi({ action: 'getByPlat', plat });
-      data = res.data;
-    } else {
-      const res = await fetchApi({ action: 'getAll' });
-      data = res.data;
-    }
-    rawRows = data || [];
-    applyAllFilters();
+    let res;
+    if (cabang) res = await fetchApi({ action: 'getByCabang', cabang });
+    else if (plat) res = await fetchApi({ action: 'getByPlat', plat });
+    else res = await fetchApi({ action: 'getAll' });
+    rawRows = res.data || [];
+    renderRawTable(rawRows);
     document.getElementById('status').textContent = 'Selesai. ' + rawRows.length + ' baris (sumber).';
   } catch (err) {
     document.getElementById('status').textContent = 'Error: ' + (err.message || err);
+    console.error(err);
     document.getElementById('thead').innerHTML = '';
     document.getElementById('tbody').innerHTML = '';
-    document.getElementById('pagination').style.display = 'none';
-    console.error(err);
   }
 }
 
-function applyAllFilters() {
-  filteredRows = rawRows.slice();
-  const cabang = document.getElementById('filterCabang').value.trim().toLowerCase();
-  const plat = document.getElementById('filterPlat').value.trim().toLowerCase();
-  if (cabang) filteredRows = filteredRows.filter(r => (String(r['Cabang']||r['cabang']||'')).toLowerCase().includes(cabang));
-  if (plat) filteredRows = filteredRows.filter(r => (String(r['Nomor Polisi']||r['NomorPolisi']||r['nomorPolisi']||r['plat']||'')).toLowerCase().includes(plat));
-  const fromVal = document.getElementById('filterFrom').value;
-  const toVal   = document.getElementById('filterTo').value;
-  if (fromVal || toVal) {
-    const fromDate = fromVal ? parseDateOnly(fromVal) : null;
-    const toDate   = toVal ? parseDateOnly(toVal) : null;
-    filteredRows = filteredRows.filter(row => {
-      const dateCandidates = ['Tanggal','tanggal','Tgl','tgl','Date','date','Timestamp'];
-      let cell = null;
-      for (const k of dateCandidates) { if (row[k] !== undefined) { cell = row[k]; break; } }
-      if (cell === null) return false;
-      const rowDate = parseDateFromCell(cell);
-      if (!rowDate) return false;
-      const d = parseDateOnly(formatISOForComparison(rowDate));
-      if (fromDate && d < fromDate) return false;
-      if (toDate && d > toDate) return false;
-      return true;
-    });
-  }
-  currentPage = 1;
-  renderTablePage();
-}
-
-function parseDateFromCell(cell) {
-  try {
-    if (cell instanceof Date) return cell;
-    if (typeof cell === 'number') return new Date(Math.round((cell - 25569) * 86400 * 1000));
-    const d = new Date(String(cell));
-    if (!isNaN(d)) return d;
-    const m = String(cell).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-    return null;
-  } catch (e) { return null; }
-}
-function formatISOForComparison(d) { const year = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0'); return `${year}-${m}-${dd}`; }
-function parseDateOnly(yyyy_mm_dd) { const parts = yyyy_mm_dd.split('-'); if (parts.length < 3) return null; return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])); }
-
-function renderTablePage() {
-  const thead = document.getElementById('thead');
-  const tbody = document.getElementById('tbody');
-  thead.innerHTML = '';
-  tbody.innerHTML = '';
-
-  if (!filteredRows || filteredRows.length === 0) {
-    thead.innerHTML = '<tr><th>Tidak ada data</th></tr>';
-    document.getElementById('pagination').style.display = 'none';
-    return;
-  }
-
-  const keys = Object.keys(filteredRows[0]);
+function renderRawTable(rows) {
+  const thead = document.getElementById('thead'), tbody = document.getElementById('tbody');
+  thead.innerHTML = ''; tbody.innerHTML = '';
+  if (!rows || rows.length === 0) { thead.innerHTML = '<tr><th>Tidak ada data</th></tr>'; return; }
+  const keys = Object.keys(rows[0]);
   const trh = document.createElement('tr');
-  keys.forEach(k => {
-    const th = document.createElement('th');
-    th.textContent = k;
-    trh.appendChild(th);
-  });
+  keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); });
   thead.appendChild(trh);
-
-  const start = (currentPage - 1) * ROWS_PER_PAGE;
-  const end = start + ROWS_PER_PAGE;
-  const pageRows = filteredRows.slice(start, end);
-
-  pageRows.forEach(r => {
+  rows.forEach(r => {
     const tr = document.createElement('tr');
     keys.forEach(k => {
       const td = document.createElement('td');
       let v = (r[k] !== undefined && r[k] !== null) ? r[k] : '';
-      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
-        v = formatISOToDMY(v);
-      } else if (v instanceof Date) {
-        v = formatDateToDMY(v);
-      }
       td.textContent = v;
-      if (String(k).toLowerCase().includes('tanggal') || String(k).toLowerCase().includes('tgl')) td.classList.add('nowrap');
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
   });
-
-  const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE);
-  document.getElementById('pagination').style.display = totalPages > 1 ? 'flex' : 'none';
-  document.getElementById('pageInfo').textContent = `Halaman ${currentPage} dari ${totalPages}`;
-  document.getElementById('prevPage').disabled = currentPage === 1;
-  document.getElementById('nextPage').disabled = currentPage === totalPages;
 }
 
-function formatISOToDMY(s) { try { const d = new Date(s); if (isNaN(d)) return s; return formatDateToDMY(d); } catch (e) { return s; } }
-function formatDateToDMY(d) { const dd = String(d.getDate()).padStart(2,'0'); const mm = String(d.getMonth()+1).padStart(2,'0'); const yy = d.getFullYear(); return dd + '/' + mm + '/' + yy; }
-
-/* ------------------------
-  Missing endpoints + display + CSV (handles object {driver,cabang})
--------------------------*/
-
-async function fetchMissingByDate(dateIso) {
-  if (!dateIso) throw new Error('Pilih tanggal terlebih dahulu.');
-  const parts = dateIso.split('-');
-  const ddmmy = parts[2] + '/' + parts[1] + '/' + parts[0];
-  const exclude = document.getElementById('excludeSundays').checked ? 'true' : 'false';
-  const res = await fetchApi({ action: 'missingByDate', date: ddmmy, excludeSundays: exclude });
-  return res;
-}
-
-function isSundayYYYYMMDD(dateStr) {
-  if (!dateStr) return false;
-  const p = dateStr.split('-');
-  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
-  return d.getDay() === 0;
-}
-
-/* showMissingList handles objects or strings */
-function showMissingList(dateStr, missingArray) {
-  document.getElementById('missingResults').style.display = 'block';
-  document.getElementById('missingSummary').textContent = `Tanggal: ${dateStr} — Jumlah yang belum mengisi: ${missingArray.length}`;
-  const content = document.getElementById('missingContent');
-  content.innerHTML = '';
-  const box = document.createElement('div'); box.className = 'missing-list';
-  if (!missingArray || missingArray.length === 0) {
-    box.innerHTML = '<div class="small">Semua driver terisi pada tanggal ini (atau hari Minggu dikecualikan).</div>';
-  } else {
-    const ul = document.createElement('ul');
-    missingArray.forEach(item => {
-      let name = '', cab = '';
-      if (typeof item === 'string') name = item;
-      else if (typeof item === 'object' && item !== null) { name = item.driver || item.name || ''; cab = item.cabang || item.branch || ''; }
-      const li = document.createElement('li');
-      li.textContent = cab ? `${name} — ${cab}` : name;
-      ul.appendChild(li);
-    });
-    box.appendChild(ul);
-  }
-  content.appendChild(box);
-}
-
-/* write to main table */
-function writeMissingByDateToTable(dateStr, missingArray) {
-  const thead = document.getElementById('thead'); const tbody = document.getElementById('tbody');
-  thead.innerHTML = '<tr><th>Driver yang belum mengisi pada ' + dateStr + '</th><th>Cabang</th></tr>';
-  tbody.innerHTML = '';
-  if (!missingArray || missingArray.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="2">Semua driver terisi pada tanggal ini.</td></tr>';
-    return;
-  }
-  missingArray.forEach(item => {
-    let name='', cab='';
-    if (typeof item === 'string') name = item;
-    else if (typeof item === 'object') { name = item.driver || item.name || ''; cab = item.cabang || item.branch || ''; }
-    const tr = document.createElement('tr');
-    const td1 = document.createElement('td'); td1.textContent = name;
-    const td2 = document.createElement('td'); td2.textContent = cab;
-    tr.appendChild(td1); tr.appendChild(td2);
-    tbody.appendChild(tr);
-  });
-  document.getElementById('pagination').style.display = 'none';
-}
-
-/* CSV helpers */
-function downloadCSV(filename, rows) {
-  const csvContent = rows.map(r => r.map(cell => {
-    if (cell === null || cell === undefined) return '';
-    const s = String(cell);
-    if (s.includes('"') || s.includes(',') || s.includes('\n')) return '"' + s.replace(/"/g,'""') + '"';
-    return s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 5000);
-}
-
-function downloadMissingByDateCSV(dateIso, missingArray) {
-  const displayDate = dateIso ? (dateIso.split('-').reverse().join('/')) : '';
-  const rows = [['Driver','Cabang']];
-  (missingArray || []).forEach(item => {
-    let name='', cab='';
-    if (typeof item === 'string') name = item;
-    else if (typeof item === 'object') { name = item.driver || item.name || ''; cab = item.cabang || item.branch || ''; }
-    rows.push([name, cab]);
-  });
-  if (rows.length === 1) rows.push([`Semua driver terisi pada ${displayDate}`, '']);
-  downloadCSV('missing_by_date_' + displayDate.replace(/\//g,'-') + '.csv', rows);
-}
-
-/* ------------------------
-  missingLastNDays handlers (similar structure)
--------------------------*/
+/* Missing-last-N-days: fetch and display */
 async function fetchMissingLastNDays(n) {
-  if (!n || isNaN(n) || n < 1) n = 7;
-  const exclude = document.getElementById('excludeSundays2').checked ? 'true' : 'false';
-  const res = await fetchApi({ action: 'missingLastNDays', n: String(n), excludeSundays: exclude });
+  const res = await fetchApi({ action: 'missingLastNDays', n: String(n), excludeSundays: document.getElementById('excludeSundays2').checked ? 'true' : 'false' });
   return res;
 }
 
 function showMissingLastNDays(n, resultObj) {
   document.getElementById('missingResults').style.display = 'block';
   const missingAll = resultObj.missingAll || [];
-  document.getElementById('missingSummary').textContent = `Periode: last ${n} hari — yg sama sekali tidak submit: ${missingAll.length}`;
-  const content = document.getElementById('missingContent'); content.innerHTML = '';
+  document.getElementById('missingSummary').textContent = `Periode: last ${n} hari — driver yang sama sekali tidak submit: ${missingAll.length}`;
+  const content = document.getElementById('missingContent');
+  content.innerHTML = '';
 
   const allBlock = document.createElement('div'); allBlock.style.marginBottom = '8px';
   allBlock.innerHTML = '<strong>Driver tidak submit sama sekali selama periode:</strong>';
@@ -405,8 +184,9 @@ function showMissingLastNDays(n, resultObj) {
   content.appendChild(table);
 }
 
+/* Write summary to main table (client) */
 function writeMissingLastNDaysToTable(n, resultObj) {
-  const thead = document.getElementById('thead'); const tbody = document.getElementById('tbody');
+  const thead = document.getElementById('thead'), tbody = document.getElementById('tbody');
   thead.innerHTML = ''; tbody.innerHTML = '';
   const keys = ['Driver','Missing Days','Total Missing'];
   const trh = document.createElement('tr'); keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); }); thead.appendChild(trh);
@@ -418,9 +198,9 @@ function writeMissingLastNDaysToTable(n, resultObj) {
     const td3 = document.createElement('td'); td3.textContent = days.length;
     tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tbody.appendChild(tr);
   }
-  document.getElementById('pagination').style.display = 'none';
 }
 
+/* Download CSV for missing-last-N-days */
 function downloadMissingLastNDaysCSV(n, resultObj) {
   const header = ['Driver','TotalMissing','MissingDays'];
   const rows = [header];
@@ -432,53 +212,24 @@ function downloadMissingLastNDaysCSV(n, resultObj) {
   downloadCSV('missing_last_' + n + '_days.csv', rows);
 }
 
-/* ------------------------
-  Events
--------------------------*/
+/* CSV util */
+function downloadCSV(filename, rows) {
+  const csvContent = rows.map(r => r.map(cell => {
+    if (cell === null || cell === undefined) return '';
+    const s = String(cell);
+    if (s.includes('"') || s.includes(',') || s.includes('\n')) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 5000);
+}
+
+/* Events */
 document.getElementById('btnRefresh').addEventListener('click', loadAll);
-document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
-document.getElementById('filterPlat').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
-document.getElementById('filterFrom').addEventListener('change', ()=> applyAllFilters());
-document.getElementById('filterTo').addEventListener('change', ()=> applyAllFilters());
-document.getElementById('prevPage').addEventListener('click', ()=>{ if (currentPage>1){ currentPage--; renderTablePage(); window.scrollTo(0,0);} });
-document.getElementById('nextPage').addEventListener('click', ()=>{ const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE); if (currentPage < totalPages) { currentPage++; renderTablePage(); window.scrollTo(0,0); } });
-
-document.getElementById('btnMissingByDate').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    if (!dateIso) return alert('Pilih tanggal dulu.');
-    const exclude = document.getElementById('excludeSundays').checked;
-    const res = await fetchMissingByDate(dateIso);
-    showMissingList(dateIso.split('-').reverse().join('/'), res.missing || []);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnMissingByDateTable').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    if (!dateIso) return alert('Pilih tanggal dulu.');
-    const res = await fetchMissingByDate(dateIso);
-    writeMissingByDateToTable(dateIso.split('-').reverse().join('/'), res.missing || []);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnDownloadMissingByDateCSV').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    if (!dateIso) return alert('Pilih tanggal dulu.');
-    const res = await fetchMissingByDate(dateIso);
-    downloadMissingByDateCSV(dateIso, res.missing || []);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
+document.getElementById('filterCabang').addEventListener('keyup',(e)=>{ if(e.key==='Enter') loadAll(); });
+document.getElementById('filterPlat').addEventListener('keyup',(e)=>{ if(e.key==='Enter') loadAll(); });
 
 document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
   try {
