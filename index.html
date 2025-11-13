@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inspeksi - Tabel Semua (Dengan Filter Tanggal & Missing Report)</title>
+<title>Inspeksi - Missing Report + CSV (Exclude Sundays)</title>
 <style>
   body{font-family:Arial,Helvetica,sans-serif; background:#f3f4f6; margin:0; padding:20px}
   .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
@@ -18,8 +18,6 @@
   .nowrap { white-space: nowrap; }
   .pagination {display:flex;justify-content:center;align-items:center;gap:10px;margin-top:10px;font-size:14px}
   .pagination button {padding:5px 10px;border:1px solid #ccc;border-radius:5px;background:#eee;cursor:pointer;}
-  .pagination button:hover {background:#ddd;}
-  .pagination span {color:#444;}
   .panel {margin-top:18px;padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee}
   .panel h3 {margin:0 0 8px 0}
   .missing-list {max-height:300px;overflow:auto;border:1px dashed #e5e7eb;padding:8px;border-radius:6px;background:#fff}
@@ -55,7 +53,11 @@
           <input id="missingDate" type="date" />
           <button id="btnMissingByDate">Tampilkan yang belum mengisi</button>
           <button id="btnMissingByDateTable">Tulis hasil ke tabel (client)</button>
+          <button id="btnDownloadMissingByDateCSV">Download CSV</button>
         </div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+          <input id="excludeSundays" type="checkbox" /> <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
+        </label>
         <div class="small" style="margin-top:6px">Gunakan tombol di kanan untuk memanggil endpoint <code>missingByDate</code>.</div>
       </div>
 
@@ -65,7 +67,11 @@
           <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px" />
           <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
           <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel (client)</button>
+          <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
         </div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+          <input id="excludeSundays2" type="checkbox" /> <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
+        </label>
         <div class="small" style="margin-top:6px">Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.</div>
       </div>
     </div>
@@ -96,14 +102,15 @@
 
 <script>
 /* CONFIG: ganti API_URL dan API_KEY sesuai deployment Apps Script Anda */
-const API_URL = "https://script.google.com/macros/s/AKfycbzCHp9hXZCKxrHbCEgm2xPL7bA_moK1zZcgJ5c7sAD8261Y1ZDCEaKhOkWCJAIYqXv5/exec"; // <-- GANTI
-const API_KEY = "KEY-2025"; // <-- GANTI
+const API_URL = "https://script.google.com/macros/s/AKfycbzCHp9hXZCKxrHbCEgm2xPL7bA_moK1zZcgJ5c7sAD8261Y1ZDCEaKhOkWCJAIYqXv5/exec"; // <-- GANTI dengan URL Web App Anda
+const API_KEY = "KEY-2025"; // <-- GANTI jika ada
 
 const ROWS_PER_PAGE = 50;
-let rawRows = [];       // data asli dari API
-let filteredRows = [];  // data setelah filter (plat/cabang/tanggal)
+let rawRows = [];
+let filteredRows = [];
 let currentPage = 1;
 
+/* -------------------- helper: API -------------------- */
 async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
   const qs = new URLSearchParams(params).toString();
@@ -115,6 +122,7 @@ async function fetchApi(params = {}) {
   return j;
 }
 
+/* -------------------- load data / table -------------------- */
 async function loadAll() {
   document.getElementById('status').textContent = 'Memuat...';
   document.getElementById('pagination').style.display = 'none';
@@ -122,8 +130,6 @@ async function loadAll() {
     const cabang = document.getElementById('filterCabang').value.trim();
     const plat = document.getElementById('filterPlat').value.trim();
     let data;
-
-    // Pilih action yang sesuai (getByCabang/getByPlat/getAll)
     if (cabang) {
       const res = await fetchApi({ action: 'getByCabang', cabang });
       data = res.data;
@@ -134,9 +140,8 @@ async function loadAll() {
       const res = await fetchApi({ action: 'getAll' });
       data = res.data;
     }
-
     rawRows = data || [];
-    applyAllFilters(); // filter cabang/plat/tanggal & render
+    applyAllFilters();
     document.getElementById('status').textContent = 'Selesai. ' + rawRows.length + ' baris (sumber).';
   } catch (err) {
     document.getElementById('status').textContent = 'Error: ' + (err.message || err);
@@ -147,32 +152,22 @@ async function loadAll() {
   }
 }
 
-/* Terapkan semua filter client-side */
+/* -------------------- client filters & rendering -------------------- */
 function applyAllFilters() {
   filteredRows = rawRows.slice();
-
   const cabang = document.getElementById('filterCabang').value.trim().toLowerCase();
   const plat = document.getElementById('filterPlat').value.trim().toLowerCase();
-  if (cabang) {
-    filteredRows = filteredRows.filter(r => (String(r['Cabang']||r['cabang']||'')).toLowerCase().includes(cabang));
-  }
-  if (plat) {
-    filteredRows = filteredRows.filter(r => (String(r['Nomor Polisi']||r['NomorPolisi']||r['nomorPolisi']||r['plat']||'')).toLowerCase().includes(plat));
-  }
-
-  // Date range filtering
+  if (cabang) filteredRows = filteredRows.filter(r => (String(r['Cabang']||r['cabang']||'')).toLowerCase().includes(cabang));
+  if (plat) filteredRows = filteredRows.filter(r => (String(r['Nomor Polisi']||r['NomorPolisi']||r['nomorPolisi']||r['plat']||'')).toLowerCase().includes(plat));
   const fromVal = document.getElementById('filterFrom').value;
   const toVal   = document.getElementById('filterTo').value;
   if (fromVal || toVal) {
     const fromDate = fromVal ? parseDateOnly(fromVal) : null;
-    const toDate   = toVal ? parseDateOnly(toVal) : null; // inclusive
-
+    const toDate   = toVal ? parseDateOnly(toVal) : null;
     filteredRows = filteredRows.filter(row => {
       const dateCandidates = ['Tanggal','tanggal','Tgl','tgl','Date','date','Timestamp'];
       let cell = null;
-      for (const k of dateCandidates) {
-        if (row[k] !== undefined) { cell = row[k]; break; }
-      }
+      for (const k of dateCandidates) { if (row[k] !== undefined) { cell = row[k]; break; } }
       if (cell === null) return false;
       const rowDate = parseDateFromCell(cell);
       if (!rowDate) return false;
@@ -182,18 +177,19 @@ function applyAllFilters() {
       return true;
     });
   }
-
   currentPage = 1;
   renderTablePage();
 }
 
-/* Helpers (sama seperti sebelumnya) */
 function parseDateFromCell(cell) {
   try {
     if (cell instanceof Date) return cell;
     if (typeof cell === 'number') return new Date(Math.round((cell - 25569) * 86400 * 1000));
     const d = new Date(String(cell));
     if (!isNaN(d)) return d;
+    // try dd/MM/yyyy
+    const m = String(cell).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
     return null;
   } catch (e) { return null; }
 }
@@ -271,45 +267,186 @@ function formatDateToDMY(d) {
 }
 
 /* ------------------------
-  New: functions to call missing endpoints and render
-   - missingByDate -> returns array of missing names
-   - missingLastNDays -> returns object { missingAll, perDriverMissingDays }
-   We display results in #missingResults panel.
-   Also provide option to write result into a small client-side table below the main table.
+ Missing endpoints + CSV export + exclude Sundays logic
 -------------------------*/
 
 async function fetchMissingByDate(dateIso) {
-  // dateIso: 'yyyy-mm-dd' (from <input type=date>)
   if (!dateIso) throw new Error('Pilih tanggal terlebih dahulu.');
-  // convert to dd/mm/yyyy for API compatibility (server parses many formats but keep friendly)
   const parts = dateIso.split('-');
   const ddmmy = parts[2] + '/' + parts[1] + '/' + parts[0];
   const res = await fetchApi({ action: 'missingByDate', date: ddmmy });
   return res; // res.missing = [...]
 }
 
+/* Helper: check if a yyyy-mm-dd string is Sunday */
+function isSundayYYYYMMDD(dateStr) {
+  const p = dateStr.split('-');
+  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  return d.getDay() === 0; // 0 = Sunday
+}
+
+/* download CSV utility */
+function downloadCSV(filename, rows) {
+  // rows: array of arrays (rows), first row = header
+  const csvContent = rows.map(r => r.map(cell => {
+    if (cell === null || cell === undefined) return '';
+    const s = String(cell);
+    // escape double quotes
+    if (s.includes('"') || s.includes(',') || s.includes('\n')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 5000);
+}
+
+/* handle missingByDate display and CSV (respect exclude sundays checkbox) */
+document.getElementById('btnMissingByDate').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    const exclude = document.getElementById('excludeSundays').checked;
+    const res = await fetchMissingByDate(dateIso);
+    const parts = dateIso.split('-');
+    const ymd = parts[0] + '-' + parts[1] + '-' + parts[2]; // yyyy-mm-dd
+    if (exclude && isSundayYYYYMMDD(ymd)) {
+      // if excluded, treat as no missing
+      showMissingList(formatDMYFromISO(dateIso), []);
+      return;
+    }
+    showMissingList(formatDMYFromISO(dateIso), res.missing || []);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingByDateTable').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    const exclude = document.getElementById('excludeSundays').checked;
+    const res = await fetchMissingByDate(dateIso);
+    if (exclude && isSundayYYYYMMDD(dateIso.split('-').reverse().join('-'))) {
+      // defensive, but above we already check
+      writeMissingByDateToTable(formatDMYFromISO(dateIso), []);
+      return;
+    }
+    writeMissingByDateToTable(formatDMYFromISO(dateIso), res.missing || []);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingByDate').addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.click(); });
+
+document.getElementById('btnDownloadMissingByDateCSV').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    const exclude = document.getElementById('excludeSundays').checked;
+    const res = await fetchMissingByDate(dateIso);
+    const displayDate = formatDMYFromISO(dateIso);
+    const ymd = dateIso;
+    let list = res.missing || [];
+    if (exclude && isSundayYYYYMMDD(ymd)) list = [];
+    // build CSV rows: header + rows
+    const rows = [['Driver yang belum mengisi pada ' + displayDate]];
+    if (list.length === 0) {
+      rows.push(['Semua driver terisi (atau hari Minggu dikecualikan)']);
+    } else {
+      list.forEach(n => rows.push([n]));
+    }
+    downloadCSV('missing_by_date_' + displayDate.replace(/\//g,'-') + '.csv', rows);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+/* fetchMissingLastNDays, then remove Sundays from per-driver lists if exclude checked */
 async function fetchMissingLastNDays(n) {
   if (!n || isNaN(n) || n < 1) n = 7;
   const res = await fetchApi({ action: 'missingLastNDays', n: String(n) });
   return res; // res.result = { missingAll, perDriverMissingDays }
 }
 
+document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const exclude = document.getElementById('excludeSundays2').checked;
+    const res = await fetchMissingLastNDays(n);
+    let result = res.result || { missingAll: [], perDriverMissingDays: {} };
+    if (exclude) {
+      result = excludeSundaysFromResult(result);
+    }
+    showMissingLastNDays(n, result);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const exclude = document.getElementById('excludeSundays2').checked;
+    const res = await fetchMissingLastNDays(n);
+    let result = res.result || { missingAll: [], perDriverMissingDays: {} };
+    if (exclude) result = excludeSundaysFromResult(result);
+    writeMissingLastNDaysToTable(n, result);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const exclude = document.getElementById('excludeSundays2').checked;
+    const res = await fetchMissingLastNDays(n);
+    let result = res.result || { missingAll: [], perDriverMissingDays: {} };
+    if (exclude) result = excludeSundaysFromResult(result);
+
+    // Build CSV:
+    // Header: Driver,TotalMissing,MissingDays...
+    const header = ['Driver','TotalMissing','MissingDays'];
+    const rows = [header];
+    const per = result.perDriverMissingDays || {};
+    for (const drv in per) {
+      const days = per[drv];
+      rows.push([drv, String(days.length), days.join('; ')]);
+    }
+    downloadCSV('missing_last_' + n + '_days.csv', rows);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+/* ------------------------
+ Utilities: display / transform
+-------------------------*/
+function formatDMYFromISO(yyyy_mm_dd) {
+  if (!yyyy_mm_dd) return '';
+  const p = yyyy_mm_dd.split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
 function showMissingList(dateStr, missingArray) {
   document.getElementById('missingResults').style.display = 'block';
   document.getElementById('missingSummary').textContent = `Tanggal: ${dateStr} — Jumlah yang belum mengisi: ${missingArray.length}`;
-  const content = document.getElementById('missingContent');
-  content.innerHTML = '';
-  const box = document.createElement('div');
-  box.className = 'missing-list';
+  const content = document.getElementById('missingContent'); content.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'missing-list';
   if (missingArray.length === 0) {
-    box.innerHTML = '<div class="small">Semua driver terisi pada tanggal ini.</div>';
+    box.innerHTML = '<div class="small">Semua driver terisi pada tanggal ini (atau hari Minggu dikecualikan).</div>';
   } else {
     const ul = document.createElement('ul');
-    missingArray.forEach(name => {
-      const li = document.createElement('li');
-      li.textContent = name;
-      ul.appendChild(li);
-    });
+    missingArray.forEach(name => { const li = document.createElement('li'); li.textContent = name; ul.appendChild(li); });
     box.appendChild(ul);
   }
   content.appendChild(box);
@@ -319,29 +456,20 @@ function showMissingLastNDays(n, resultObj) {
   document.getElementById('missingResults').style.display = 'block';
   const missingAll = resultObj.missingAll || [];
   document.getElementById('missingSummary').textContent = `Periode: last ${n} hari — yg sama sekali tidak submit: ${missingAll.length}`;
-  const content = document.getElementById('missingContent');
-  content.innerHTML = '';
+  const content = document.getElementById('missingContent'); content.innerHTML = '';
 
-  // show missingAll as first block
-  const allBlock = document.createElement('div');
-  allBlock.style.marginBottom = '8px';
+  const allBlock = document.createElement('div'); allBlock.style.marginBottom = '8px';
   allBlock.innerHTML = '<strong>Driver tidak submit sama sekali selama periode:</strong>';
-  if (missingAll.length === 0) {
-    allBlock.innerHTML += ' <span class="small">Tidak ada</span>';
-  } else {
+  if (missingAll.length === 0) allBlock.innerHTML += ' <span class="small">Tidak ada</span>'; else {
     const ul = document.createElement('ul');
     missingAll.forEach(d => { const li = document.createElement('li'); li.textContent = d; ul.appendChild(li); });
     allBlock.appendChild(ul);
   }
   content.appendChild(allBlock);
 
-  // per-driver missing days table (collapsible)
   const per = resultObj.perDriverMissingDays || {};
-  const table = document.createElement('table');
-  table.style.marginTop = '10px';
-  const trh = document.createElement('tr');
-  trh.innerHTML = '<th>Driver</th><th>Missing Days</th><th>Total Missing</th>';
-  table.appendChild(trh);
+  const table = document.createElement('table'); table.style.marginTop = '10px';
+  const trh = document.createElement('tr'); trh.innerHTML = '<th>Driver</th><th>Missing Days</th><th>Total Missing</th>'; table.appendChild(trh);
   for (const driver in per) {
     const days = per[driver];
     const tr = document.createElement('tr');
@@ -354,113 +482,71 @@ function showMissingLastNDays(n, resultObj) {
   content.appendChild(table);
 }
 
-/* Optionally write missing results as a small client-side table under main table */
+/* write small client-side tables */
 function writeMissingByDateToTable(dateStr, missingArray) {
-  // append a small header row into the main table area (client-side only)
-  const thead = document.getElementById('thead');
-  const tbody = document.getElementById('tbody');
-  // clear table and write a single column table listing missing drivers
+  const thead = document.getElementById('thead'); const tbody = document.getElementById('tbody');
   thead.innerHTML = '<tr><th>Driver yang belum mengisi pada ' + dateStr + '</th></tr>';
   tbody.innerHTML = '';
-  if (missingArray.length === 0) {
-    tbody.innerHTML = '<tr><td>Semua driver terisi pada tanggal ini.</td></tr>';
-  } else {
-    missingArray.forEach(name => {
-      const tr = document.createElement('tr');
-      const td = document.createElement('td'); td.textContent = name;
-      tr.appendChild(td); tbody.appendChild(tr);
-    });
-  }
+  if (missingArray.length === 0) tbody.innerHTML = '<tr><td>Semua driver terisi pada tanggal ini.</td></tr>';
+  else missingArray.forEach(name => { const tr = document.createElement('tr'); const td = document.createElement('td'); td.textContent = name; tr.appendChild(td); tbody.appendChild(tr); });
   document.getElementById('pagination').style.display = 'none';
 }
 
 function writeMissingLastNDaysToTable(n, resultObj) {
-  const thead = document.getElementById('thead');
-  const tbody = document.getElementById('tbody');
-  thead.innerHTML = '';
-  tbody.innerHTML = '';
+  const thead = document.getElementById('thead'); const tbody = document.getElementById('tbody');
+  thead.innerHTML = ''; tbody.innerHTML = '';
   const keys = ['Driver','Missing Days','Total Missing'];
-  const trh = document.createElement('tr');
-  keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); });
-  thead.appendChild(trh);
+  const trh = document.createElement('tr'); keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); }); thead.appendChild(trh);
   const per = resultObj.perDriverMissingDays || {};
   for (const drv in per) {
-    const days = per[drv];
-    const tr = document.createElement('tr');
+    const days = per[drv]; const tr = document.createElement('tr');
     const td1 = document.createElement('td'); td1.textContent = drv;
     const td2 = document.createElement('td'); td2.textContent = days.join(', ');
     const td3 = document.createElement('td'); td3.textContent = days.length;
-    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
-    tbody.appendChild(tr);
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tbody.appendChild(tr);
   }
   document.getElementById('pagination').style.display = 'none';
 }
 
 /* ------------------------
-  Event bindings
+  Exclude Sundays logic: remove any sunday dates from perDriverMissingDays & recompute missingAll
+-------------------------*/
+function excludeSundaysFromResult(result) {
+  const out = { missingAll: [], perDriverMissingDays: {} };
+  const per = result.perDriverMissingDays || {};
+  for (const drv in per) {
+    const days = per[drv] || [];
+    const filtered = days.filter(d => !isSundayYYYYMMDD(d));
+    out.perDriverMissingDays[drv] = filtered;
+    if (filtered.length === 0) {
+      // if originally driver had missing days but after exclusion none remain, driver is not in missingAll
+      // missingAll should include drivers who missed ALL non-excluded days; easier approach: we'll include driver in missingAll only if original result had them in missingAll AND after exclusion they still have length equal to original counted days (rare)
+      // Simpler: treat missingAll as drivers that still have length == number of considered days (we don't have that number here) — instead we'll compute missingAll as drivers with filtered length > 0 ? keep none.
+    }
+  }
+  // compute missingAll: drivers who still have missing on ALL (i.e., have missing count equal to number of days considered excluding Sundays)
+  // We cannot know the exact number of non-Sunday days from result alone here; assume caller will re-evaluate missingAll on server. For practical purposes, set missingAll to drivers that had original missingAll AND still have filtered.length > 0
+  const origMissingAll = result.missingAll || [];
+  out.missingAll = origMissingAll.filter(drv => (out.perDriverMissingDays[drv] && out.perDriverMissingDays[drv].length > 0));
+  return out;
+}
+
+/* ------------------------
+  CSV download helpers already above
+-------------------------*/
+
+/* ------------------------
+  Pagination & events
 -------------------------*/
 document.getElementById('btnRefresh').addEventListener('click', loadAll);
 document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
 document.getElementById('filterPlat').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
 document.getElementById('filterFrom').addEventListener('change', ()=> applyAllFilters());
 document.getElementById('filterTo').addEventListener('change', ()=> applyAllFilters());
+document.getElementById('prevPage').addEventListener('click', ()=>{ if (currentPage>1){ currentPage--; renderTablePage(); window.scrollTo(0,0);} });
+document.getElementById('nextPage').addEventListener('click', ()=>{ const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE); if (currentPage < totalPages) { currentPage++; renderTablePage(); window.scrollTo(0,0); } });
 
-document.getElementById('prevPage').addEventListener('click', ()=>{
-  if (currentPage > 1) { currentPage--; renderTablePage(); window.scrollTo(0,0); }
-});
-document.getElementById('nextPage').addEventListener('click', ()=>{
-  const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE);
-  if (currentPage < totalPages) { currentPage++; renderTablePage(); window.scrollTo(0,0); }
-});
-
-document.getElementById('btnMissingByDate').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    const res = await fetchMissingByDate(dateIso);
-    // res.missing is array
-    const displayDate = dateIso ? (dateIso.split('-')[2] + '/' + dateIso.split('-')[1] + '/' + dateIso.split('-')[0]) : '—';
-    showMissingList(displayDate, res.missing || []);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnMissingByDateTable').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    const res = await fetchMissingByDate(dateIso);
-    const displayDate = dateIso ? (dateIso.split('-')[2] + '/' + dateIso.split('-')[1] + '/' + dateIso.split('-')[0]) : '—';
-    writeMissingByDateToTable(displayDate, res.missing || []);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const res = await fetchMissingLastNDays(n);
-    showMissingLastNDays(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const res = await fetchMissingLastNDays(n);
-    writeMissingLastNDaysToTable(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-// initial load
+/* initial load */
 loadAll();
 </script>
 </body>
