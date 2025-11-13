@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inspeksi - Missing Report + CSV (Exclude Sundays)</title>
+<title>Inspeksi - Missing Report + CSV (with Cabang & JSONP fallback)</title>
 <style>
   body{font-family:Arial,Helvetica,sans-serif; background:#f3f4f6; margin:0; padding:20px}
   .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
@@ -24,6 +24,7 @@
   .grid {display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media (max-width:900px){ .grid{grid-template-columns:1fr} }
   @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} }
+  ul { margin: 8px 12px; padding-left: 18px; }
 </style>
 </head>
 <body>
@@ -45,7 +46,6 @@
       <span class="small">Data berasal dari Apps Script API</span>
     </div>
 
-    <!-- NEW: Controls for missing-driver reports -->
     <div class="panel grid" style="align-items:center">
       <div>
         <h3>Cek driver yang belum mengisi (per tanggal)</h3>
@@ -91,7 +91,6 @@
       <button id="nextPage">Next »</button>
     </div>
 
-    <!-- Missing results panel -->
     <div class="panel" id="missingResults" style="display:none">
       <h3>Hasil — Driver yang belum mengisi</h3>
       <div id="missingSummary" class="small"></div>
@@ -102,27 +101,58 @@
 
 <script>
 /* CONFIG: ganti API_URL dan API_KEY sesuai deployment Apps Script Anda */
-const API_URL = "https://script.google.com/macros/s/AKfycbwRiVrZJb68u3miMtSayj2w3teEKzd-cJpR8t5yU5CplnO4Gee_jqsNhmypsjGuaoiQ/exec"; // <-- GANTI dengan URL Web App Anda
-const API_KEY = "KEY-2025"; // <-- GANTI jika ada
+const API_URL = "https://script.google.com/macros/s/AKfycbwRiVrZJb68u3miMtSayj2w3teEKzd-cJpR8t5yU5CplnO4Gee_jqsNhmypsjGuaoiQ/exec"; // <-- GANTI
+const API_KEY = "KEY-2025"; // <-- GANTI
 
 const ROWS_PER_PAGE = 50;
 let rawRows = [];
 let filteredRows = [];
 let currentPage = 1;
 
-/* -------------------- helper: API -------------------- */
+/* -------------------- JSONP fallback utility -------------------- */
+function jsonpFetch(url) {
+  return new Promise((resolve, reject) => {
+    const cb = 'cb_' + Math.random().toString(36).slice(2);
+    window[cb] = function(data) {
+      try { resolve(data); } finally { delete window[cb]; script.remove(); }
+    };
+    const script = document.createElement('script');
+    script.src = url + (url.indexOf('?') === -1 ? '?' : '&') + 'callback=' + cb;
+    script.onerror = function(err) {
+      delete window[cb];
+      script.remove();
+      reject(new Error('JSONP load error'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+/* fetchApi: try fetch -> fallback to jsonpFetch */
 async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
   const qs = new URLSearchParams(params).toString();
   const url = API_URL + "?" + qs;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const j = await res.json();
-  if (!j.success) throw new Error(j.error || 'API returned success=false');
-  return j;
+  try {
+    const res = await fetch(url, { method: 'GET', mode: 'cors' });
+    if (!res.ok) {
+      // fallback to JSONP
+      return await jsonpFetch(url);
+    }
+    const j = await res.json();
+    if (j && (j.success === true || j.success === false)) return j;
+    // if response isn't JSON we expect, try JSONP
+    return await jsonpFetch(url);
+  } catch (err) {
+    // fallback to JSONP if CORS/network error
+    try {
+      return await jsonpFetch(url);
+    } catch (err2) {
+      throw err; // original
+    }
+  }
 }
 
-/* -------------------- load data / table -------------------- */
+/* -------------------- load / render table -------------------- */
 async function loadAll() {
   document.getElementById('status').textContent = 'Memuat...';
   document.getElementById('pagination').style.display = 'none';
@@ -152,7 +182,6 @@ async function loadAll() {
   }
 }
 
-/* -------------------- client filters & rendering -------------------- */
 function applyAllFilters() {
   filteredRows = rawRows.slice();
   const cabang = document.getElementById('filterCabang').value.trim().toLowerCase();
@@ -187,23 +216,14 @@ function parseDateFromCell(cell) {
     if (typeof cell === 'number') return new Date(Math.round((cell - 25569) * 86400 * 1000));
     const d = new Date(String(cell));
     if (!isNaN(d)) return d;
-    // try dd/MM/yyyy
     const m = String(cell).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
     return null;
   } catch (e) { return null; }
 }
-function formatISOForComparison(d) {
-  const year = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const dd = String(d.getDate()).padStart(2,'0');
-  return `${year}-${m}-${dd}`;
-}
-function parseDateOnly(yyyy_mm_dd) {
-  const parts = yyyy_mm_dd.split('-');
-  if (parts.length < 3) return null;
-  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-}
+function formatISOForComparison(d) { const year = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0'); return `${year}-${m}-${dd}`; }
+function parseDateOnly(yyyy_mm_dd) { const parts = yyyy_mm_dd.split('-'); if (parts.length < 3) return null; return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])); }
+
 function renderTablePage() {
   const thead = document.getElementById('thead');
   const tbody = document.getElementById('tbody');
@@ -252,49 +272,82 @@ function renderTablePage() {
   document.getElementById('prevPage').disabled = currentPage === 1;
   document.getElementById('nextPage').disabled = currentPage === totalPages;
 }
-function formatISOToDMY(s) {
-  try {
-    const d = new Date(s);
-    if (isNaN(d)) return s;
-    return formatDateToDMY(d);
-  } catch (e) { return s; }
-}
-function formatDateToDMY(d) {
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const yy = d.getFullYear();
-  return dd + '/' + mm + '/' + yy;
-}
+
+function formatISOToDMY(s) { try { const d = new Date(s); if (isNaN(d)) return s; return formatDateToDMY(d); } catch (e) { return s; } }
+function formatDateToDMY(d) { const dd = String(d.getDate()).padStart(2,'0'); const mm = String(d.getMonth()+1).padStart(2,'0'); const yy = d.getFullYear(); return dd + '/' + mm + '/' + yy; }
 
 /* ------------------------
- Missing endpoints + CSV export + exclude Sundays logic
+  Missing endpoints + display + CSV (handles object {driver,cabang})
 -------------------------*/
 
 async function fetchMissingByDate(dateIso) {
   if (!dateIso) throw new Error('Pilih tanggal terlebih dahulu.');
   const parts = dateIso.split('-');
   const ddmmy = parts[2] + '/' + parts[1] + '/' + parts[0];
-  const res = await fetchApi({ action: 'missingByDate', date: ddmmy });
-  return res; // res.missing = [...]
+  const exclude = document.getElementById('excludeSundays').checked ? 'true' : 'false';
+  const res = await fetchApi({ action: 'missingByDate', date: ddmmy, excludeSundays: exclude });
+  return res;
 }
 
-/* Helper: check if a yyyy-mm-dd string is Sunday */
 function isSundayYYYYMMDD(dateStr) {
+  if (!dateStr) return false;
   const p = dateStr.split('-');
   const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
-  return d.getDay() === 0; // 0 = Sunday
+  return d.getDay() === 0;
 }
 
-/* download CSV utility */
+/* showMissingList handles objects or strings */
+function showMissingList(dateStr, missingArray) {
+  document.getElementById('missingResults').style.display = 'block';
+  document.getElementById('missingSummary').textContent = `Tanggal: ${dateStr} — Jumlah yang belum mengisi: ${missingArray.length}`;
+  const content = document.getElementById('missingContent');
+  content.innerHTML = '';
+  const box = document.createElement('div'); box.className = 'missing-list';
+  if (!missingArray || missingArray.length === 0) {
+    box.innerHTML = '<div class="small">Semua driver terisi pada tanggal ini (atau hari Minggu dikecualikan).</div>';
+  } else {
+    const ul = document.createElement('ul');
+    missingArray.forEach(item => {
+      let name = '', cab = '';
+      if (typeof item === 'string') name = item;
+      else if (typeof item === 'object' && item !== null) { name = item.driver || item.name || ''; cab = item.cabang || item.branch || ''; }
+      const li = document.createElement('li');
+      li.textContent = cab ? `${name} — ${cab}` : name;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  content.appendChild(box);
+}
+
+/* write to main table */
+function writeMissingByDateToTable(dateStr, missingArray) {
+  const thead = document.getElementById('thead'); const tbody = document.getElementById('tbody');
+  thead.innerHTML = '<tr><th>Driver yang belum mengisi pada ' + dateStr + '</th><th>Cabang</th></tr>';
+  tbody.innerHTML = '';
+  if (!missingArray || missingArray.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2">Semua driver terisi pada tanggal ini.</td></tr>';
+    return;
+  }
+  missingArray.forEach(item => {
+    let name='', cab='';
+    if (typeof item === 'string') name = item;
+    else if (typeof item === 'object') { name = item.driver || item.name || ''; cab = item.cabang || item.branch || ''; }
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = name;
+    const td2 = document.createElement('td'); td2.textContent = cab;
+    tr.appendChild(td1); tr.appendChild(td2);
+    tbody.appendChild(tr);
+  });
+  document.getElementById('pagination').style.display = 'none';
+}
+
+/* CSV helpers */
 function downloadCSV(filename, rows) {
-  // rows: array of arrays (rows), first row = header
   const csvContent = rows.map(r => r.map(cell => {
     if (cell === null || cell === undefined) return '';
     const s = String(cell);
-    // escape double quotes
-    if (s.includes('"') || s.includes(',') || s.includes('\n')) {
-      return '"' + s.replace(/"/g, '""') + '"';
-    }
+    if (s.includes('"') || s.includes(',') || s.includes('\n')) return '"' + s.replace(/"/g,'""') + '"';
     return s;
   }).join(',')).join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -305,151 +358,27 @@ function downloadCSV(filename, rows) {
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 5000);
 }
 
-/* handle missingByDate display and CSV (respect exclude sundays checkbox) */
-document.getElementById('btnMissingByDate').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    const exclude = document.getElementById('excludeSundays').checked;
-    const res = await fetchMissingByDate(dateIso);
-    const parts = dateIso.split('-');
-    const ymd = parts[0] + '-' + parts[1] + '-' + parts[2]; // yyyy-mm-dd
-    if (exclude && isSundayYYYYMMDD(ymd)) {
-      // if excluded, treat as no missing
-      showMissingList(formatDMYFromISO(dateIso), []);
-      return;
-    }
-    showMissingList(formatDMYFromISO(dateIso), res.missing || []);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnMissingByDateTable').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    const exclude = document.getElementById('excludeSundays').checked;
-    const res = await fetchMissingByDate(dateIso);
-    if (exclude && isSundayYYYYMMDD(dateIso.split('-').reverse().join('-'))) {
-      // defensive, but above we already check
-      writeMissingByDateToTable(formatDMYFromISO(dateIso), []);
-      return;
-    }
-    writeMissingByDateToTable(formatDMYFromISO(dateIso), res.missing || []);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnMissingByDate').addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.click(); });
-
-document.getElementById('btnDownloadMissingByDateCSV').addEventListener('click', async () => {
-  try {
-    const dateIso = document.getElementById('missingDate').value;
-    const exclude = document.getElementById('excludeSundays').checked;
-    const res = await fetchMissingByDate(dateIso);
-    const displayDate = formatDMYFromISO(dateIso);
-    const ymd = dateIso;
-    let list = res.missing || [];
-    if (exclude && isSundayYYYYMMDD(ymd)) list = [];
-    // build CSV rows: header + rows
-    const rows = [['Driver yang belum mengisi pada ' + displayDate]];
-    if (list.length === 0) {
-      rows.push(['Semua driver terisi (atau hari Minggu dikecualikan)']);
-    } else {
-      list.forEach(n => rows.push([n]));
-    }
-    downloadCSV('missing_by_date_' + displayDate.replace(/\//g,'-') + '.csv', rows);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-/* fetchMissingLastNDays, then remove Sundays from per-driver lists if exclude checked */
-async function fetchMissingLastNDays(n) {
-  if (!n || isNaN(n) || n < 1) n = 7;
-  const res = await fetchApi({ action: 'missingLastNDays', n: String(n) });
-  return res; // res.result = { missingAll, perDriverMissingDays }
+function downloadMissingByDateCSV(dateIso, missingArray) {
+  const displayDate = dateIso ? (dateIso.split('-').reverse().join('/')) : '';
+  const rows = [['Driver','Cabang']];
+  (missingArray || []).forEach(item => {
+    let name='', cab='';
+    if (typeof item === 'string') name = item;
+    else if (typeof item === 'object') { name = item.driver || item.name || ''; cab = item.cabang || item.branch || ''; }
+    rows.push([name, cab]);
+  });
+  if (rows.length === 1) rows.push([`Semua driver terisi pada ${displayDate}`, '']);
+  downloadCSV('missing_by_date_' + displayDate.replace(/\//g,'-') + '.csv', rows);
 }
-
-document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const exclude = document.getElementById('excludeSundays2').checked;
-    const res = await fetchMissingLastNDays(n);
-    let result = res.result || { missingAll: [], perDriverMissingDays: {} };
-    if (exclude) {
-      result = excludeSundaysFromResult(result);
-    }
-    showMissingLastNDays(n, result);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const exclude = document.getElementById('excludeSundays2').checked;
-    const res = await fetchMissingLastNDays(n);
-    let result = res.result || { missingAll: [], perDriverMissingDays: {} };
-    if (exclude) result = excludeSundaysFromResult(result);
-    writeMissingLastNDaysToTable(n, result);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
-
-document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const exclude = document.getElementById('excludeSundays2').checked;
-    const res = await fetchMissingLastNDays(n);
-    let result = res.result || { missingAll: [], perDriverMissingDays: {} };
-    if (exclude) result = excludeSundaysFromResult(result);
-
-    // Build CSV:
-    // Header: Driver,TotalMissing,MissingDays...
-    const header = ['Driver','TotalMissing','MissingDays'];
-    const rows = [header];
-    const per = result.perDriverMissingDays || {};
-    for (const drv in per) {
-      const days = per[drv];
-      rows.push([drv, String(days.length), days.join('; ')]);
-    }
-    downloadCSV('missing_last_' + n + '_days.csv', rows);
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
-});
 
 /* ------------------------
- Utilities: display / transform
+  missingLastNDays handlers (similar structure)
 -------------------------*/
-function formatDMYFromISO(yyyy_mm_dd) {
-  if (!yyyy_mm_dd) return '';
-  const p = yyyy_mm_dd.split('-');
-  return p[2] + '/' + p[1] + '/' + p[0];
-}
-
-function showMissingList(dateStr, missingArray) {
-  document.getElementById('missingResults').style.display = 'block';
-  document.getElementById('missingSummary').textContent = `Tanggal: ${dateStr} — Jumlah yang belum mengisi: ${missingArray.length}`;
-  const content = document.getElementById('missingContent'); content.innerHTML = '';
-  const box = document.createElement('div'); box.className = 'missing-list';
-  if (missingArray.length === 0) {
-    box.innerHTML = '<div class="small">Semua driver terisi pada tanggal ini (atau hari Minggu dikecualikan).</div>';
-  } else {
-    const ul = document.createElement('ul');
-    missingArray.forEach(name => { const li = document.createElement('li'); li.textContent = name; ul.appendChild(li); });
-    box.appendChild(ul);
-  }
-  content.appendChild(box);
+async function fetchMissingLastNDays(n) {
+  if (!n || isNaN(n) || n < 1) n = 7;
+  const exclude = document.getElementById('excludeSundays2').checked ? 'true' : 'false';
+  const res = await fetchApi({ action: 'missingLastNDays', n: String(n), excludeSundays: exclude });
+  return res;
 }
 
 function showMissingLastNDays(n, resultObj) {
@@ -482,16 +411,6 @@ function showMissingLastNDays(n, resultObj) {
   content.appendChild(table);
 }
 
-/* write small client-side tables */
-function writeMissingByDateToTable(dateStr, missingArray) {
-  const thead = document.getElementById('thead'); const tbody = document.getElementById('tbody');
-  thead.innerHTML = '<tr><th>Driver yang belum mengisi pada ' + dateStr + '</th></tr>';
-  tbody.innerHTML = '';
-  if (missingArray.length === 0) tbody.innerHTML = '<tr><td>Semua driver terisi pada tanggal ini.</td></tr>';
-  else missingArray.forEach(name => { const tr = document.createElement('tr'); const td = document.createElement('td'); td.textContent = name; tr.appendChild(td); tbody.appendChild(tr); });
-  document.getElementById('pagination').style.display = 'none';
-}
-
 function writeMissingLastNDaysToTable(n, resultObj) {
   const thead = document.getElementById('thead'); const tbody = document.getElementById('tbody');
   thead.innerHTML = ''; tbody.innerHTML = '';
@@ -508,35 +427,19 @@ function writeMissingLastNDaysToTable(n, resultObj) {
   document.getElementById('pagination').style.display = 'none';
 }
 
-/* ------------------------
-  Exclude Sundays logic: remove any sunday dates from perDriverMissingDays & recompute missingAll
--------------------------*/
-function excludeSundaysFromResult(result) {
-  const out = { missingAll: [], perDriverMissingDays: {} };
-  const per = result.perDriverMissingDays || {};
+function downloadMissingLastNDaysCSV(n, resultObj) {
+  const header = ['Driver','TotalMissing','MissingDays'];
+  const rows = [header];
+  const per = resultObj.perDriverMissingDays || {};
   for (const drv in per) {
-    const days = per[drv] || [];
-    const filtered = days.filter(d => !isSundayYYYYMMDD(d));
-    out.perDriverMissingDays[drv] = filtered;
-    if (filtered.length === 0) {
-      // if originally driver had missing days but after exclusion none remain, driver is not in missingAll
-      // missingAll should include drivers who missed ALL non-excluded days; easier approach: we'll include driver in missingAll only if original result had them in missingAll AND after exclusion they still have length equal to original counted days (rare)
-      // Simpler: treat missingAll as drivers that still have length == number of considered days (we don't have that number here) — instead we'll compute missingAll as drivers with filtered length > 0 ? keep none.
-    }
+    const days = per[drv];
+    rows.push([drv, String(days.length), days.join('; ')]);
   }
-  // compute missingAll: drivers who still have missing on ALL (i.e., have missing count equal to number of days considered excluding Sundays)
-  // We cannot know the exact number of non-Sunday days from result alone here; assume caller will re-evaluate missingAll on server. For practical purposes, set missingAll to drivers that had original missingAll AND still have filtered.length > 0
-  const origMissingAll = result.missingAll || [];
-  out.missingAll = origMissingAll.filter(drv => (out.perDriverMissingDays[drv] && out.perDriverMissingDays[drv].length > 0));
-  return out;
+  downloadCSV('missing_last_' + n + '_days.csv', rows);
 }
 
 /* ------------------------
-  CSV download helpers already above
--------------------------*/
-
-/* ------------------------
-  Pagination & events
+  Events
 -------------------------*/
 document.getElementById('btnRefresh').addEventListener('click', loadAll);
 document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key==='Enter') loadAll(); });
@@ -545,6 +448,76 @@ document.getElementById('filterFrom').addEventListener('change', ()=> applyAllFi
 document.getElementById('filterTo').addEventListener('change', ()=> applyAllFilters());
 document.getElementById('prevPage').addEventListener('click', ()=>{ if (currentPage>1){ currentPage--; renderTablePage(); window.scrollTo(0,0);} });
 document.getElementById('nextPage').addEventListener('click', ()=>{ const totalPages = Math.ceil(filteredRows.length / ROWS_PER_PAGE); if (currentPage < totalPages) { currentPage++; renderTablePage(); window.scrollTo(0,0); } });
+
+document.getElementById('btnMissingByDate').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    if (!dateIso) return alert('Pilih tanggal dulu.');
+    const exclude = document.getElementById('excludeSundays').checked;
+    const res = await fetchMissingByDate(dateIso);
+    showMissingList(dateIso.split('-').reverse().join('/'), res.missing || []);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingByDateTable').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    if (!dateIso) return alert('Pilih tanggal dulu.');
+    const res = await fetchMissingByDate(dateIso);
+    writeMissingByDateToTable(dateIso.split('-').reverse().join('/'), res.missing || []);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnDownloadMissingByDateCSV').addEventListener('click', async () => {
+  try {
+    const dateIso = document.getElementById('missingDate').value;
+    if (!dateIso) return alert('Pilih tanggal dulu.');
+    const res = await fetchMissingByDate(dateIso);
+    downloadMissingByDateCSV(dateIso, res.missing || []);
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    showMissingLastNDays(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    writeMissingLastNDaysToTable(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('click', async () => {
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    downloadMissingLastNDaysCSV(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
 
 /* initial load */
 loadAll();
