@@ -1,271 +1,451 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LOGBOOK — Missing (N hari)</title>
-<style>
-  body{font-family:Arial,Helvetica,sans-serif;background:#f3f4f6;margin:0;padding:20px}
-  .wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
-  h1{margin-top:0}
-  .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
-  input[type=text], input[type=date], input[type=number], select, button{padding:8px;border:1px solid #ccc;border-radius:6px}
-  button{cursor:pointer}
-  table{width:100%;border-collapse:collapse;margin-top:10px}
-  th,td{padding:8px;border:1px solid #e2e8f0;text-align:left;font-size:14px}
-  th{background:#0ea5b6;color:#fff}
-  .small{font-size:13px;color:#666}
-  .nowrap { white-space: nowrap; }
-  .panel {margin-top:18px;padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee}
-  .missing-list {max-height:300px;overflow:auto;border:1px dashed #e5e7eb;padding:8px;border-radius:6px;background:#fff}
-  .grid {display:grid;grid-template-columns:1fr;gap:12px}
-  .flexrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  @media (max-width:700px){ .controls{flex-direction:column;align-items:stretch} }
-  ul { margin: 8px 12px; padding-left: 18px; }
-</style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LOGBOOK — Missing (N hari) dengan Filter Cabang</title>
+
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; margin: 0; padding: 20px; }
+        .wrap { max-width: 1100px; margin: 0 auto; background: #fff; padding: 18px; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.06); }
+        .controls { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+        input[type=text], input[type=number], select, button { padding:8px; border:1px solid #ccc; border-radius:6px; }
+        button { cursor:pointer; }
+        table { width:100%; border-collapse:collapse; margin-top:10px; }
+        th,td { padding:8px; border:1px solid #e2e8f0; text-align:left; font-size:14px; }
+        th { background:#0ea5b6; color:white; }
+        .panel { margin-top:18px; padding:12px; border-radius:8px; background:#fafafa; border:1px solid #eee; }
+        .flexrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .small { font-size:13px; color:#666; }
+        ul { padding-left:20px; }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>LOGBOOK — Cek Driver yang belum mengisi (N hari terakhir)</h1>
+<div class="wrap">
+    <h1>LOGBOOK — Cek Driver yang Belum Mengisi (N hari terakhir)</h1>
 
+    <!-- FILTER -->
     <div class="controls">
-      <input id="filterCabang" placeholder="Filter cabang (kosong=semua)" />
-      <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)" />
-      <button id="btnRefresh">Refresh / Apply</button>
-      <span class="small">Data berasal dari Apps Script API</span>
+        <input id="filterCabang" placeholder="Filter cabang (kosong = semua)">
+        <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)">
+        <!-- NEW: dropdown for cabang filter used for missing results -->
+        <label style="display:flex;gap:8px;align-items:center;">
+            <span class="small">Pilih Cabang (hasil missing):</span>
+            <select id="missingCabangFilter" style="min-width:220px;">
+                <option value="">Semua cabang</option>
+            </select>
+        </label>
+
+        <button id="btnRefresh">Refresh / Apply</button>
+        <span class="small">Data berasal dari Apps Script API</span>
     </div>
 
+    <!-- PANEL: Missing N days -->
     <div class="panel">
-      <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
-      <div class="flexrow" style="margin-bottom:8px">
-        <label style="display:flex;gap:6px;align-items:center;">
-          N hari:
-          <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px;margin-left:6px" />
-        </label>
-        <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
-        <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel (client)</button>
-        <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
-        <label style="display:flex;gap:8px;align-items:center;margin-left:8px;">
-          <input id="excludeSundays2" type="checkbox" /> <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
-        </label>
-      </div>
-      <div class="small">Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.</div>
+        <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
+        <div class="flexrow" style="margin-bottom:8px;">
+            <label style="display:flex;gap:6px;align-items:center;">
+                N hari:
+                <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px;">
+            </label>
+
+            <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
+            <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel</button>
+            <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
+
+            <label style="display:flex;gap:6px;align-items:center;margin-left:8px;">
+                <input id="excludeSundays2" type="checkbox">
+                <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
+            </label>
+        </div>
+
+        <div class="small">
+            Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.
+            Gunakan dropdown "Pilih Cabang" untuk membatasi hasil pada cabang tertentu.
+        </div>
     </div>
 
     <div id="status" class="small" style="margin-top:12px">Memuat...</div>
 
-    <div style="overflow:auto;margin-top:12px">
-      <table id="tbl">
-        <thead id="thead"></thead>
-        <tbody id="tbody"></tbody>
-      </table>
+    <!-- TABEL UTAMA -->
+    <div style="overflow:auto; margin-top:12px;">
+        <table id="tbl">
+            <thead id="thead"></thead>
+            <tbody id="tbody"></tbody>
+        </table>
     </div>
 
-    <div class="panel" id="missingResults" style="display:none">
-      <h3>Hasil — Driver yang belum mengisi</h3>
-      <div id="missingSummary" class="small"></div>
-      <div id="missingContent" style="margin-top:8px"></div>
+    <!-- PANEL HASIL MISSING -->
+    <div class="panel" id="missingResults" style="display:none;">
+        <h3>Hasil — Driver yang belum mengisi</h3>
+        <div id="missingSummary" class="small"></div>
+        <div id="missingContent" style="margin-top:10px;"></div>
     </div>
-  </div>
+</div>
 
 <script>
-/* CONFIG: ganti API_URL dan API_KEY sesuai deployment Apps Script Anda */
+/* -------------------------
+   CONFIG: ganti API_URL / API_KEY
+   ------------------------- */
 const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec"; // <-- GANTI
 const API_KEY = "KEY-2025"; // <-- GANTI
 
-/* JSONP fallback (useful for GH Pages if CORS happens) */
+/* -------------------------
+   JSONP fallback (GH Pages)
+   ------------------------- */
 function jsonpFetch(url) {
-  return new Promise((resolve, reject) => {
-    const cb = 'cb_' + Math.random().toString(36).slice(2);
-    window[cb] = function(data) {
-      try { resolve(data); } finally { delete window[cb]; script.remove(); }
-    };
-    const script = document.createElement('script');
-    script.src = url + (url.indexOf('?') === -1 ? '?' : '&') + 'callback=' + cb;
-    script.onerror = function(err) {
-      delete window[cb]; script.remove(); reject(new Error('JSONP load error'));
-    };
-    document.head.appendChild(script);
-  });
-}
-
-/* fetchApi: fetch then fallback to JSONP */
-async function fetchApi(params = {}) {
-  params.apiKey = API_KEY;
-  const qs = new URLSearchParams(params).toString();
-  const url = API_URL + "?" + qs;
-  try {
-    const res = await fetch(url, { method: 'GET', mode: 'cors' });
-    if (!res.ok) return await jsonpFetch(url);
-    const j = await res.json();
-    if (j && (j.success === true || j.success === false)) return j;
-    return await jsonpFetch(url);
-  } catch (err) {
-    try { return await jsonpFetch(url); } catch (err2) { throw err; }
-  }
-}
-
-/* Load all (getAll / getByCabang / getByPlat) and render table (source data) */
-let rawRows = [];
-async function loadAll() {
-  document.getElementById('status').textContent = 'Memuat...';
-  try {
-    const cabang = document.getElementById('filterCabang').value.trim();
-    const plat = document.getElementById('filterPlat').value.trim();
-    let res;
-    if (cabang) res = await fetchApi({ action: 'getByCabang', cabang });
-    else if (plat) res = await fetchApi({ action: 'getByPlat', plat });
-    else res = await fetchApi({ action: 'getAll' });
-    rawRows = res.data || [];
-    renderRawTable(rawRows);
-    document.getElementById('status').textContent = 'Selesai. ' + rawRows.length + ' baris (sumber).';
-  } catch (err) {
-    document.getElementById('status').textContent = 'Error: ' + (err.message || err);
-    console.error(err);
-    document.getElementById('thead').innerHTML = '';
-    document.getElementById('tbody').innerHTML = '';
-  }
-}
-
-function renderRawTable(rows) {
-  const thead = document.getElementById('thead'), tbody = document.getElementById('tbody');
-  thead.innerHTML = ''; tbody.innerHTML = '';
-  if (!rows || rows.length === 0) { thead.innerHTML = '<tr><th>Tidak ada data</th></tr>'; return; }
-  const keys = Object.keys(rows[0]);
-  const trh = document.createElement('tr');
-  keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); });
-  thead.appendChild(trh);
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
-    keys.forEach(k => {
-      const td = document.createElement('td');
-      let v = (r[k] !== undefined && r[k] !== null) ? r[k] : '';
-      td.textContent = v;
-      tr.appendChild(td);
+    return new Promise((resolve, reject) => {
+        const cb = "cb_" + Math.random().toString(36).substring(2);
+        window[cb] = (data) => { try { resolve(data); } finally { delete window[cb]; script.remove(); } };
+        const script = document.createElement("script");
+        script.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cb;
+        script.onerror = () => { delete window[cb]; script.remove(); reject(new Error("JSONP load error")); };
+        document.head.appendChild(script);
     });
-    tbody.appendChild(tr);
-  });
 }
 
-/* Missing-last-N-days: fetch and display */
+/* -------------------------
+   fetch wrapper (fetch -> jsonp)
+   ------------------------- */
+async function fetchApi(params = {}) {
+    params.apiKey = API_KEY;
+    const qs = new URLSearchParams(params).toString();
+    const url = API_URL + "?" + qs;
+    try {
+        const res = await fetch(url, { method: "GET", mode: "cors" });
+        if (!res.ok) return await jsonpFetch(url);
+        const json = await res.json();
+        if (json && typeof json.success !== "undefined") return json;
+        return await jsonpFetch(url);
+    } catch (err) {
+        try { return await jsonpFetch(url); } catch (e) { throw err; }
+    }
+}
+
+/* -------------------------
+   client-side state
+   ------------------------- */
+let rawRows = []; // data from getAll
+let driverCabangMap = {}; // normalizedName -> cabang (latest known)
+
+/* -------------------------
+   helper normalize name
+   ------------------------- */
+function normalizeName(s) {
+    if (!s && s !== 0) return "";
+    return String(s).trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/* -------------------------
+   loadAll() -> getAll endpoint, build cabang list & map
+   ------------------------- */
+async function loadAll() {
+    document.getElementById("status").textContent = "Memuat...";
+    try {
+        const cab = document.getElementById("filterCabang").value.trim();
+        const plat = document.getElementById("filterPlat").value.trim();
+        let res;
+        if (cab) res = await fetchApi({ action: "getByCabang", cabang: cab });
+        else if (plat) res = await fetchApi({ action: "getByPlat", plat: plat });
+        else res = await fetchApi({ action: "getAll" });
+
+        rawRows = res.data || [];
+        buildDriverCabangMap(rawRows);
+        populateMissingCabangDropdown();
+        renderRawTable(rawRows);
+
+        document.getElementById("status").textContent = "Selesai. " + rawRows.length + " baris (sumber).";
+    } catch (err) {
+        document.getElementById("status").textContent = "Error: " + (err.message || err);
+        console.error(err);
+    }
+}
+
+/* -------------------------
+   Build mapping driver -> last known cabang from rawRows
+   - prefer the last occurrence (scan from top to bottom and override)
+   ------------------------- */
+function buildDriverCabangMap(rows) {
+    driverCabangMap = {};
+    if (!rows || !rows.length) return;
+    // find driver key and cabang key from first row keys
+    const sample = rows[0] || {};
+    const allKeys = Object.keys(sample);
+    // choose possible driver/cabang keys heuristically
+    const driverKeywords = ["driver", "nama", "username"];
+    const cabangKeywords = ["cabang", "branch"];
+    function findKey(row, keysArr) {
+        for (const k of Object.keys(row || {})) {
+            const kl = k.toLowerCase();
+            for (const kw of keysArr) if (kl.indexOf(kw) !== -1) return k;
+        }
+        return null;
+    }
+    const driverKey = findKey(sample, driverKeywords) || "Driver";
+    const cabangKey = findKey(sample, cabangKeywords) || "Cabang";
+
+    // scan rows and update map (later entries override earlier ones so map ends with last known)
+    for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const dv = r[driverKey] || r["Driver"] || r["Nama"] || r["username"] || r["Username"];
+        const cab = r[cabangKey] || r["Cabang"] || r["cabang"] || "";
+        if (!dv && dv !== 0) continue;
+        driverCabangMap[normalizeName(dv)] = (cab || "").toString().trim();
+    }
+}
+
+/* -------------------------
+   populate cabang dropdown for missing filter (unique values from rawRows)
+   ------------------------- */
+function populateMissingCabangDropdown() {
+    const sel = document.getElementById("missingCabangFilter");
+    // preserve current selection
+    const curr = sel.value || "";
+    // gather unique cabang values
+    const set = new Set();
+    for (const r of rawRows) {
+        // detect cabang key heuristically
+        const keys = Object.keys(r);
+        let cabVal = null;
+        for (const k of keys) {
+            const kl = k.toLowerCase();
+            if (kl.indexOf("cabang") !== -1 || kl.indexOf("branch") !== -1) { cabVal = r[k]; break; }
+        }
+        if (cabVal === null) {
+            cabVal = r["Cabang"] || r["cabang"] || "";
+        }
+        const trimmed = (cabVal || "").toString().trim();
+        if (trimmed !== "") set.add(trimmed);
+    }
+    // sort alphabetically
+    const arr = Array.from(set).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+    // rebuild options
+    sel.innerHTML = "";
+    const optAll = document.createElement("option");
+    optAll.value = ""; optAll.textContent = "Semua cabang";
+    sel.appendChild(optAll);
+    arr.forEach(c => {
+        const o = document.createElement("option");
+        o.value = c; o.textContent = c;
+        sel.appendChild(o);
+    });
+    // restore selection if possible
+    if (curr) sel.value = curr;
+}
+
+/* -------------------------
+   render raw table (getAll)
+   ------------------------- */
+function renderRawTable(rows) {
+    const th = document.getElementById("thead");
+    const tb = document.getElementById("tbody");
+    th.innerHTML = ""; tb.innerHTML = "";
+    if (!rows || rows.length === 0) { th.innerHTML = "<tr><th>Tidak ada data</th></tr>"; return; }
+    const keys = Object.keys(rows[0]);
+    const trh = document.createElement("tr");
+    keys.forEach(k => { const thd = document.createElement("th"); thd.textContent = k; trh.appendChild(thd); });
+    th.appendChild(trh);
+    rows.forEach(row => {
+        const tr = document.createElement("tr");
+        keys.forEach(k => {
+            const td = document.createElement("td");
+            td.textContent = row[k] ?? "";
+            tr.appendChild(td);
+        });
+        tb.appendChild(tr);
+    });
+}
+
+/* -------------------------
+   fetch missingLastNDays
+   ------------------------- */
 async function fetchMissingLastNDays(n) {
-  const res = await fetchApi({ action: 'missingLastNDays', n: String(n), excludeSundays: document.getElementById('excludeSundays2').checked ? 'true' : 'false' });
-  return res;
+    const res = await fetchApi({
+        action: "missingLastNDays",
+        n: String(n),
+        excludeSundays: document.getElementById("excludeSundays2").checked ? "true" : "false"
+    });
+    return res;
 }
 
+/* -------------------------
+   Helper: check if driver belongs to selected cabang (based on driverCabangMap)
+   - if selCabang is empty => true (include all)
+   - else compare map value case-insensitive
+   ------------------------- */
+function driverMatchesCabang(driverName, selCabang) {
+    if (!selCabang || selCabang.toString().trim() === "") return true;
+    const key = normalizeName(driverName);
+    const cabKnown = driverCabangMap[key] || "";
+    return cabKnown.toString().trim().toLowerCase() === selCabang.toString().trim().toLowerCase();
+}
+
+/* -------------------------
+   showMissingLastNDays (applies cabang filter)
+   ------------------------- */
 function showMissingLastNDays(n, resultObj) {
-  document.getElementById('missingResults').style.display = 'block';
-  const missingAll = resultObj.missingAll || [];
-  document.getElementById('missingSummary').textContent = `Periode: last ${n} hari — driver yang sama sekali tidak submit: ${missingAll.length}`;
-  const content = document.getElementById('missingContent');
-  content.innerHTML = '';
+    document.getElementById("missingResults").style.display = "block";
+    const missingAll = resultObj.missingAll || []; // array of driver names
+    const per = resultObj.perDriverMissingDays || {}; // map driver->array days
+    const selCabang = document.getElementById("missingCabangFilter").value || "";
 
-  const allBlock = document.createElement('div'); allBlock.style.marginBottom = '8px';
-  allBlock.innerHTML = '<strong>Driver tidak submit sama sekali selama periode:</strong>';
-  if (missingAll.length === 0) allBlock.innerHTML += ' <span class="small">Tidak ada</span>'; else {
-    const ul = document.createElement('ul');
-    missingAll.forEach(d => { const li = document.createElement('li'); li.textContent = d; ul.appendChild(li); });
-    allBlock.appendChild(ul);
-  }
-  content.appendChild(allBlock);
+    // filter missingAll by cabang using driverCabangMap
+    const missingFiltered = missingAll.filter(name => driverMatchesCabang(name, selCabang));
 
-  const per = resultObj.perDriverMissingDays || {};
-  const table = document.createElement('table'); table.style.marginTop = '10px';
-  const trh = document.createElement('tr'); trh.innerHTML = '<th>Driver</th><th>Missing Days</th><th>Total Missing</th>'; table.appendChild(trh);
-  for (const driver in per) {
-    const days = per[driver];
-    const tr = document.createElement('tr');
-    const td1 = document.createElement('td'); td1.textContent = driver;
-    const td2 = document.createElement('td'); td2.textContent = days.join(', ');
-    const td3 = document.createElement('td'); td3.textContent = days.length;
-    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
-    table.appendChild(tr);
-  }
-  content.appendChild(table);
+    document.getElementById("missingSummary").textContent =
+        "Periode: last " + n + " hari — Driver tidak submit (filter cabang: " + (selCabang || "Semua") + "): " + missingFiltered.length;
+
+    const content = document.getElementById("missingContent");
+    content.innerHTML = "";
+
+    // Section 1: drivers who never submit in period (after cabang filter)
+    const block1 = document.createElement("div");
+    block1.innerHTML = "<strong>Driver tidak submit sama sekali:</strong>";
+
+    if (missingFiltered.length === 0) {
+        block1.innerHTML += " <span class='small'>Tidak ada</span>";
+    } else {
+        const ul = document.createElement("ul");
+        missingFiltered.forEach(d => {
+            const li = document.createElement("li");
+            // show cabang (if known)
+            const cab = driverCabangMap[normalizeName(d)] || "";
+            li.textContent = cab ? (d + " — " + cab) : d;
+            ul.appendChild(li);
+        });
+        block1.appendChild(ul);
+    }
+    content.appendChild(block1);
+
+    // Section 2: detailed table (driver -> missing days), but only include drivers that pass cabang filter
+    const table = document.createElement("table");
+    table.style.marginTop = "12px";
+    const header = document.createElement("tr");
+    header.innerHTML = "<th>Driver</th><th>Missing Days</th><th>Total</th>";
+    table.appendChild(header);
+
+    // iterate per-driver keys in a stable order (alphabetical)
+    const drivers = Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+    for (const drv of drivers) {
+        if (!driverMatchesCabang(drv, selCabang)) continue;
+        const days = per[drv];
+        const tr = document.createElement("tr");
+        const cab = driverCabangMap[normalizeName(drv)] || "";
+        const displayName = cab ? (drv + " — " + cab) : drv;
+        tr.innerHTML = "<td>" + displayName + "</td><td>" + days.join(", ") + "</td><td>" + days.length + "</td>";
+        table.appendChild(tr);
+    }
+    content.appendChild(table);
 }
 
-/* Write summary to main table (client) */
+/* -------------------------
+   writeMissingLastNDaysToTable (client side) with cabang filter
+   ------------------------- */
 function writeMissingLastNDaysToTable(n, resultObj) {
-  const thead = document.getElementById('thead'), tbody = document.getElementById('tbody');
-  thead.innerHTML = ''; tbody.innerHTML = '';
-  const keys = ['Driver','Missing Days','Total Missing'];
-  const trh = document.createElement('tr'); keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); }); thead.appendChild(trh);
-  const per = resultObj.perDriverMissingDays || {};
-  for (const drv in per) {
-    const days = per[drv]; const tr = document.createElement('tr');
-    const td1 = document.createElement('td'); td1.textContent = drv;
-    const td2 = document.createElement('td'); td2.textContent = days.join(', ');
-    const td3 = document.createElement('td'); td3.textContent = days.length;
-    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tbody.appendChild(tr);
-  }
+    const th = document.getElementById("thead");
+    const tb = document.getElementById("tbody");
+    th.innerHTML = "";
+    tb.innerHTML = "";
+
+    th.innerHTML = "<tr><th>Driver</th><th>Missing Days</th><th>Total Missing</th></tr>";
+
+    const per = resultObj.perDriverMissingDays || {};
+    const selCabang = document.getElementById("missingCabangFilter").value || "";
+
+    const drivers = Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+    for (const drv of drivers) {
+        if (!driverMatchesCabang(drv, selCabang)) continue;
+        const days = per[drv];
+        const cab = driverCabangMap[normalizeName(drv)] || "";
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + (cab ? (drv + " — " + cab) : drv) + "</td><td>" + days.join(", ") + "</td><td>" + days.length + "</td>";
+        tb.appendChild(tr);
+    }
 }
 
-/* Download CSV for missing-last-N-days */
+/* -------------------------
+   CSV download (apply cabang filter)
+   ------------------------- */
 function downloadMissingLastNDaysCSV(n, resultObj) {
-  const header = ['Driver','TotalMissing','MissingDays'];
-  const rows = [header];
-  const per = resultObj.perDriverMissingDays || {};
-  for (const drv in per) {
-    const days = per[drv];
-    rows.push([drv, String(days.length), days.join('; ')]);
-  }
-  downloadCSV('missing_last_' + n + '_days.csv', rows);
+    const per = resultObj.perDriverMissingDays || {};
+    const selCabang = document.getElementById("missingCabangFilter").value || "";
+    const rows = [["Driver", "Cabang", "TotalMissing", "MissingDays"]];
+
+    const drivers = Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+    for (const drv of drivers) {
+        if (!driverMatchesCabang(drv, selCabang)) continue;
+        const days = per[drv];
+        const cab = driverCabangMap[normalizeName(drv)] || "";
+        rows.push([drv, cab, String(days.length), days.join("; ")]);
+    }
+    downloadCSV("missing_last_" + n + "_days_filtered.csv", rows);
 }
 
-/* CSV util */
+/* -------------------------
+   CSV util
+   ------------------------- */
 function downloadCSV(filename, rows) {
-  const csvContent = rows.map(r => r.map(cell => {
-    if (cell === null || cell === undefined) return '';
-    const s = String(cell);
-    if (s.includes('"') || s.includes(',') || s.includes('\n')) return '"' + s.replace(/"/g,'""') + '"';
-    return s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 5000);
+    const csv = rows.map(r => r.map(v => {
+        if (v == null) return "";
+        v = String(v);
+        if (v.includes(",") || v.includes('"') || v.includes("\n")) return '"' + v.replace(/"/g,'""') + '"';
+        return v;
+    }).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
 }
 
-/* Events */
-document.getElementById('btnRefresh').addEventListener('click', loadAll);
-document.getElementById('filterCabang').addEventListener('keyup',(e)=>{ if(e.key==='Enter') loadAll(); });
-document.getElementById('filterPlat').addEventListener('keyup',(e)=>{ if(e.key==='Enter') loadAll(); });
+/* -------------------------
+   EVENTS
+   ------------------------- */
+document.getElementById("btnRefresh").addEventListener("click", loadAll);
 
-document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const res = await fetchMissingLastNDays(n);
-    showMissingLastNDays(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
+document.getElementById("filterCabang").addEventListener("keyup", (e) => { if (e.key === "Enter") loadAll(); });
+document.getElementById("filterPlat").addEventListener("keyup", (e) => { if (e.key === "Enter") loadAll(); });
+
+document.getElementById("btnMissingLastNDays").addEventListener("click", async () => {
+    try {
+        const n = Number(document.getElementById("missingDaysCount").value) || 7;
+        const res = await fetchMissingLastNDays(n);
+        showMissingLastNDays(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+    } catch (err) {
+        alert("Error: " + (err.message || err));
+        console.error(err);
+    }
 });
 
-document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const res = await fetchMissingLastNDays(n);
-    writeMissingLastNDaysToTable(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
+document.getElementById("btnMissingLastNDaysTable").addEventListener("click", async () => {
+    try {
+        const n = Number(document.getElementById("missingDaysCount").value) || 7;
+        const res = await fetchMissingLastNDays(n);
+        writeMissingLastNDaysToTable(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+    } catch (err) {
+        alert("Error: " + (err.message || err));
+        console.error(err);
+    }
 });
 
-document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('click', async () => {
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const res = await fetchMissingLastNDays(n);
-    downloadMissingLastNDaysCSV(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
+document.getElementById("btnDownloadMissingLastNDaysCSV").addEventListener("click", async () => {
+    try {
+        const n = Number(document.getElementById("missingDaysCount").value) || 7;
+        const res = await fetchMissingLastNDays(n);
+        downloadMissingLastNDaysCSV(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+    } catch (err) {
+        alert("Error: " + (err.message || err));
+        console.error(err);
+    }
 });
 
-/* initial load */
+/* -------------------------
+   initial load
+   ------------------------- */
 loadAll();
+
 </script>
 </body>
 </html>
