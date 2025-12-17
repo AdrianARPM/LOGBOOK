@@ -51,7 +51,7 @@
 
         <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
         <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel</button>
-        <button id="btnDownloadMissingLastNDaysExcel">Download Excel</button>
+        <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
 
         <label style="display:flex; gap:6px; align-items:center; margin-left:8px;">
           <input id="excludeSundays2" type="checkbox">
@@ -462,17 +462,41 @@ function writeMissingLastNDaysToTable(n, resultObj) {
   renderRawTablePaged();
 }
 
-/* ================= EXCEL (GANTI CSV) ================= */
-btnDownloadMissingLastNDaysExcel.onclick = ()=>{
-  if(!rawRows.length) return alert('Tidak ada data');
-  const ws = XLSX.utils.json_to_sheet(rawRows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Missing");
-  XLSX.writeFile(
-    wb,
-    `missing_last_${missingDaysCount.value}_days.xlsx`
-  );
-};
+/* -------------------------
+   CSV download (apply cabang filter)
+------------------------- */
+function downloadMissingLastNDaysCSV(n, resultObj) {
+  const per = resultObj.perDriverMissingDays || {};
+  const selCabang = document.getElementById('missingCabangFilter').value || '';
+  const rows = [['Driver','Cabang','TotalMissing','MissingDays']];
+  const drivers = Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+  for (const drv of drivers) {
+    if (!driverMatchesCabang(drv, selCabang)) continue;
+    const days = per[drv];
+    const cab = driverCabangMap[normalizeName(drv)] || '';
+    rows.push([drv, cab, String(days.length), days.join('; ')]);
+  }
+  downloadCSV('missing_last_' + n + '_days_filtered.csv', rows);
+}
+
+/* -------------------------
+   CSV util
+------------------------- */
+function downloadCSV(filename, rows) {
+  const csv = rows.map(r => r.map(v => {
+    if (v == null) return '';
+    v = String(v);
+    if (v.includes(',') || v.includes('"') || v.includes('\n')) return '"' + v.replace(/"/g,'""') + '"';
+    return v;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
+}
 
 /* -------------------------
    Events
