@@ -1,60 +1,78 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <title>LOGBOOK — Monitoring Inspeksi & Missing Driver</title>
+  <meta charset="utf-8" />
+  <title>LOGBOOK — Missing Driver</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Tailwind -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- SheetJS (Excel) -->
+  <!-- SheetJS (Excel Export) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-
-  <!-- jsPDF -->
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 
 <body class="bg-slate-100 min-h-screen p-6">
 <div class="max-w-7xl mx-auto bg-white rounded-xl shadow p-6">
 
-<h1 class="text-2xl font-bold mb-6">
-  LOGBOOK — Monitoring Inspeksi & Missing Driver
-</h1>
+  <h1 class="text-2xl font-bold mb-6">
+    LOGBOOK — Cek Driver yang Belum Mengisi (N Hari)
+  </h1>
 
-<!-- FILTER -->
-<div class="grid md:grid-cols-5 gap-3 mb-4">
-  <input id="filterCabang" class="input" placeholder="Filter Cabang">
-  <input id="filterPlat" class="input" placeholder="Filter Plat">
-  <select id="missingCabangFilter" class="input">
-    <option value="">Semua Cabang</option>
-  </select>
-  <input id="missingDaysCount" type="number" value="7" min="1" class="input">
-  <button id="btnRefresh" class="btn-blue">Refresh</button>
-</div>
+  <!-- FILTER -->
+  <div class="grid md:grid-cols-5 gap-3 mb-4">
+    <input id="filterCabang" class="input" placeholder="Filter cabang">
+    <input id="filterPlat" class="input" placeholder="Filter plat">
+    <select id="missingCabangFilter" class="input">
+      <option value="">Semua cabang</option>
+    </select>
+    <input id="missingDaysCount" type="number" value="7" min="1" class="input">
+    <button id="btnRefresh" class="btn-blue">Refresh</button>
+  </div>
 
-<!-- ACTION -->
-<div class="flex flex-wrap gap-3 mb-4 items-center">
-  <label class="flex items-center gap-2 text-sm">
-    <input id="excludeSundays" type="checkbox" class="scale-110">
-    Exclude Hari Minggu
-  </label>
+  <!-- ACTION -->
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <label class="flex items-center gap-2 text-sm">
+      <input id="excludeSundays2" type="checkbox" class="scale-110">
+      Exclude hari Minggu
+    </label>
 
-  <button id="btnMissing" class="btn-orange">Cek Missing N Hari</button>
-  <button id="btnExcel" class="btn-green">Download Excel</button>
-  <button id="btnPDF" class="btn-red">Download PDF</button>
-</div>
+    <button id="btnMissingLastNDays" class="btn-orange">
+      Cek Missing N Hari
+    </button>
 
-<p id="status" class="text-sm text-slate-500 mb-3">Memuat...</p>
+    <button id="btnMissingLastNDaysTable" class="btn-indigo">
+      Tampilkan ke Tabel
+    </button>
 
-<!-- TABLE -->
-<div class="overflow-auto">
-<table class="min-w-full text-sm border" id="tbl">
-  <thead class="bg-cyan-600 text-white" id="thead"></thead>
-  <tbody id="tbody"></tbody>
-</table>
-</div>
+    <button id="btnDownloadMissingLastNDaysExcel" class="btn-green">
+      Download Excel
+    </button>
+  </div>
+
+  <p id="status" class="text-sm text-slate-500 mb-3">Memuat...</p>
+
+  <!-- TABLE -->
+  <div class="overflow-auto border rounded">
+    <table class="min-w-full text-sm">
+      <thead id="thead" class="bg-cyan-600 text-white sticky top-0"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- PAGINATION -->
+  <div id="paginationControls" class="flex items-center gap-3 mt-4 text-sm hidden">
+    <button id="btnPrevPage" class="btn-gray">Prev</button>
+    <span>
+      Halaman
+      <input id="inputPage" type="number" min="1" value="1" class="w-16 input inline">
+      dari <span id="spanTotalPages">1</span>
+    </span>
+    <button id="btnNextPage" class="btn-gray">Next</button>
+    <span class="text-slate-500">
+      / <span id="spanPageSize">50</span> baris
+    </span>
+  </div>
 
 </div>
 
@@ -63,95 +81,104 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec";
 const API_KEY = "KEY-2025";
 
-/* ================= STATE ================= */
-let rawRows = [];
-let currentKeys = [];
+/* ================= PAGINATION ================= */
+let currentPage = 1;
+const pageSize = 50;
+document.getElementById('spanPageSize').textContent = pageSize;
 
 /* ================= FETCH ================= */
 async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
-  const url = API_URL + "?" + new URLSearchParams(params);
-  const res = await fetch(url);
+  const res = await fetch(API_URL + "?" + new URLSearchParams(params));
   return await res.json();
 }
 
-/* ================= LOAD ALL ================= */
+/* ================= STATE ================= */
+let rawRows = [];
+let currentKeys = [];
+
+/* ================= LOAD ================= */
 async function loadAll() {
-  document.getElementById("status").textContent = "Memuat...";
-  const res = await fetchApi({ action: "getAll" });
+  document.getElementById('status').textContent = 'Memuat...';
+  const cab = filterCabang.value.trim();
+  const plat = filterPlat.value.trim();
+
+  let res;
+  if (cab) res = await fetchApi({ action:'getByCabang', cabang:cab });
+  else if (plat) res = await fetchApi({ action:'getByPlat', plat });
+  else res = await fetchApi({ action:'getAll' });
+
   rawRows = res.data || [];
   currentKeys = rawRows[0] ? Object.keys(rawRows[0]) : [];
-  renderTable(rawRows);
-  document.getElementById("status").textContent =
-    `Selesai. ${rawRows.length} baris`;
+  currentPage = 1;
+  renderTable();
+  status.textContent = `Selesai. ${rawRows.length} baris.`;
 }
 
-/* ================= TABLE ================= */
-function renderTable(rows) {
-  const thead = document.getElementById("thead");
-  const tbody = document.getElementById("tbody");
-  thead.innerHTML = tbody.innerHTML = "";
+/* ================= RENDER ================= */
+function renderTable() {
+  thead.innerHTML = tbody.innerHTML = '';
 
-  if (!rows.length) {
-    thead.innerHTML = "<tr><th>Tidak ada data</th></tr>";
+  if (!rawRows.length) {
+    thead.innerHTML = '<tr><th class="p-3">Tidak ada data</th></tr>';
+    paginationControls.classList.add('hidden');
     return;
   }
 
-  thead.innerHTML =
-    "<tr>" + currentKeys.map(k => `<th class="px-2 py-2">${k}</th>`).join("") + "</tr>";
+  thead.innerHTML = '<tr>' +
+    currentKeys.map(k=>`<th class="px-3 py-2">${k}</th>`).join('') +
+    '</tr>';
 
-  rows.forEach(r => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = currentKeys.map(k =>
-      `<td class="border px-2 py-1">${r[k] ?? ""}</td>`
-    ).join("");
-    tbody.appendChild(tr);
+  const start = (currentPage-1)*pageSize;
+  const slice = rawRows.slice(start, start+pageSize);
+
+  slice.forEach(r=>{
+    tbody.insertAdjacentHTML('beforeend',
+      '<tr class="odd:bg-slate-50">' +
+      currentKeys.map(k=>`<td class="border px-3 py-1">${r[k] ?? ''}</td>`).join('') +
+      '</tr>'
+    );
   });
+
+  const totalPages = Math.ceil(rawRows.length/pageSize);
+  spanTotalPages.textContent = totalPages;
+  inputPage.value = currentPage;
+  paginationControls.classList.toggle('hidden', totalPages<=1);
 }
 
 /* ================= MISSING ================= */
-document.getElementById("btnMissing").onclick = async () => {
-  const n = Number(document.getElementById("missingDaysCount").value || 7);
-  const exclude = document.getElementById("excludeSundays").checked;
-
+btnMissingLastNDays.onclick = async ()=>{
+  const n = Number(missingDaysCount.value)||7;
   const res = await fetchApi({
-    action: "missingLastNDays",
+    action:'missingLastNDays',
     n,
-    excludeSundays: exclude ? "true" : "false"
+    excludeSundays: excludeSundays2.checked ? 'true':'false'
   });
 
   const per = res.result?.perDriverMissingDays || {};
-  const rows = Object.keys(per).map(d => ({
-    Driver: d,
-    "Total Missing": per[d].length,
-    "Tanggal Kosong": per[d].join(", ")
+  rawRows = Object.keys(per).map(d=>({
+    Driver:d,
+    'Total Missing':per[d].length,
+    'Missing Days':per[d].join(', ')
   }));
-
-  rawRows = rows;
-  currentKeys = ["Driver", "Total Missing", "Tanggal Kosong"];
-  renderTable(rawRows);
+  currentKeys = ['Driver','Total Missing','Missing Days'];
+  currentPage = 1;
+  renderTable();
 };
 
 /* ================= EXCEL ================= */
-document.getElementById("btnExcel").onclick = () => {
+btnDownloadMissingLastNDaysExcel.onclick = ()=>{
   const ws = XLSX.utils.json_to_sheet(rawRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Missing");
-  XLSX.writeFile(wb, "missing_driver.xlsx");
+  XLSX.writeFile(wb, `missing_last_${missingDaysCount.value}_days.xlsx`);
 };
 
-/* ================= PDF ================= */
-document.getElementById("btnPDF").onclick = () => {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF("l", "pt", "a4");
-  doc.text("Missing Driver Logbook", 40, 40);
-  doc.autoTable({
-    startY: 60,
-    head: [currentKeys],
-    body: rawRows.map(r => currentKeys.map(k => r[k])),
-  });
-  doc.save("missing_driver.pdf");
-};
+/* ================= EVENTS ================= */
+btnRefresh.onclick = loadAll;
+btnPrevPage.onclick = ()=>{ if(currentPage>1){currentPage--;renderTable();}};
+btnNextPage.onclick = ()=>{currentPage++;renderTable();};
+inputPage.onchange = ()=>{currentPage=Number(inputPage.value)||1;renderTable();};
 
 /* ================= INIT ================= */
 loadAll();
@@ -162,7 +189,9 @@ loadAll();
 .btn-blue{ @apply bg-blue-600 text-white px-4 py-2 rounded }
 .btn-orange{ @apply bg-orange-500 text-white px-4 py-2 rounded }
 .btn-green{ @apply bg-green-600 text-white px-4 py-2 rounded }
-.btn-red{ @apply bg-red-600 text-white px-4 py-2 rounded }
+.btn-indigo{ @apply bg-indigo-600 text-white px-4 py-2 rounded }
+.btn-gray{ @apply bg-slate-300 px-3 py-1 rounded }
 </style>
+
 </body>
 </html>
