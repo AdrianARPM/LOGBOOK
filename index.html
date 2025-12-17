@@ -4,8 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>LOGBOOK — Missing (N hari) dengan Pagination & Tanggal dd-MM-yyyy</title>
-
-  <!-- ===== CSS ASLI (TIDAK DIUBAH) ===== -->
   <style>
     body { font-family: Arial, Helvetica, sans-serif; background:#f3f4f6; margin:0; padding:20px; }
     .wrap { max-width:1100px; margin:0 auto; background:#fff; padding:18px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.06); }
@@ -23,146 +21,446 @@
     .nowrap { white-space:nowrap; }
     @media (max-width:700px){ .controls { flex-direction:column; align-items:stretch; } }
   </style>
-
-  <!-- ===== SheetJS (Excel Export) ===== -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 </head>
-
 <body>
-<div class="wrap">
-  <h1>LOGBOOK — Cek Driver yang Belum Mengisi (N hari terakhir)</h1>
+  <div class="wrap">
+    <h1>LOGBOOK — Cek Driver yang Belum Mengisi (N hari terakhir)</h1>
 
-  <!-- FILTER -->
-  <div class="controls">
-    <input id="filterCabang" placeholder="Filter cabang (kosong = semua)">
-    <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)">
-    <select id="missingCabangFilter" style="min-width:200px;">
-      <option value="">Semua cabang</option>
-    </select>
-    <button id="btnRefresh">Refresh / Apply</button>
-    <span class="small">Data berasal dari Apps Script API</span>
-  </div>
-
-  <!-- PANEL MISSING -->
-  <div class="panel">
-    <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
-    <div class="flexrow">
-      N hari:
-      <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px;">
-      <button id="btnMissingLastNDays">Tampilkan Missing</button>
-      <button id="btnMissingLastNDaysTable">Tulis ke Tabel</button>
-      <button id="btnDownloadMissingLastNDaysExcel">Download Excel</button>
-
-      <label class="small">
-        <input id="excludeSundays2" type="checkbox">
-        Exclude Sundays
+    <!-- FILTER -->
+    <div class="controls">
+      <input id="filterCabang" placeholder="Filter cabang (kosong = semua)">
+      <input id="filterPlat" placeholder="Filter plat (BM 1234 AB)">
+      <label style="display:flex; gap:8px; align-items:center;">
+        <span class="small">Pilih Cabang (hasil missing):</span>
+        <select id="missingCabangFilter" style="min-width:200px;">
+          <option value="">Semua cabang</option>
+        </select>
       </label>
+      <button id="btnRefresh">Refresh / Apply</button>
+      <span class="small">Data berasal dari Apps Script API</span>
     </div>
-  </div>
 
-  <div id="status" class="small" style="margin-top:12px">Memuat...</div>
+    <!-- PANEL: Missing N days -->
+    <div class="panel">
+      <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
+      <div class="flexrow" style="margin-bottom:8px;">
+        <label style="display:flex; gap:6px; align-items:center;">
+          N hari:
+          <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px;">
+        </label>
 
-  <!-- TABLE -->
-  <div style="overflow:auto">
-    <table>
-      <thead id="thead"></thead>
-      <tbody id="tbody"></tbody>
-    </table>
-  </div>
+        <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
+        <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel</button>
+        <button id="btnDownloadMissingLastNDaysExcel">Download Excel</button>
 
-  <!-- PAGINATION -->
-  <div id="paginationControls" class="pagination" style="display:none">
-    <button id="btnPrevPage">Prev</button>
-    <span class="small nowrap">
-      Halaman <input id="inputPage" type="number" value="1" style="width:60px">
-      dari <span id="spanTotalPages">1</span>
-    </span>
-    <button id="btnNextPage">Next</button>
-    <span class="small"> / <span id="spanPageSize">50</span> baris</span>
+        <label style="display:flex; gap:6px; align-items:center; margin-left:8px;">
+          <input id="excludeSundays2" type="checkbox">
+          <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
+        </label>
+      </div>
+
+      <div class="small">
+        Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.
+        Gunakan dropdown "Pilih Cabang" untuk membatasi hasil pada cabang tertentu.
+      </div>
+    </div>
+
+    <div id="status" class="small" style="margin-top:12px">Memuat...</div>
+
+    <!-- TABEL UTAMA -->
+    <div style="overflow:auto; margin-top:12px;">
+      <table id="tbl">
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- PAGINATION CONTROLS -->
+    <div id="paginationControls" class="pagination" style="display:none">
+      <button id="btnPrevPage">&laquo; Prev</button>
+      <span class="small nowrap">Halaman <input id="inputPage" type="number" min="1" value="1" style="width:70px"> dari <span id="spanTotalPages">1</span></span>
+      <button id="btnNextPage">Next &raquo;</button>
+      <span class="small"> / Menampilkan <span id="spanPageSize">50</span> baris per halaman</span>
+    </div>
+
+    <!-- PANEL HASIL MISSING -->
+    <div class="panel" id="missingResults" style="display:none;">
+      <h3>Hasil — Driver yang belum mengisi</h3>
+      <div id="missingSummary" class="small"></div>
+      <div id="missingContent" style="margin-top:10px;"></div>
+    </div>
+
   </div>
-</div>
 
 <script>
-/* ================= CONFIG ================= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec";
-const API_KEY = "KEY-2025";
+/* -------------------------
+   CONFIG: GANTI API_URL & API_KEY
+------------------------- */
+const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec"; // <-- ganti
+const API_KEY = "KEY-2025"; // <-- ganti
 
-/* ================= STATE ================= */
-let rawRows = [];
-let currentKeys = [];
+/* -------------------------
+   pagination config
+------------------------- */
 let currentPage = 1;
-const pageSize = 50;
-document.getElementById('spanPageSize').textContent = pageSize;
+const pageSize = 50; // per 50 baris
+document.getElementById('spanPageSize').textContent = String(pageSize);
 
-/* ================= FETCH ================= */
-async function fetchApi(params={}) {
+/* -------------------------
+   JSONP fallback (GitHub Pages)
+------------------------- */
+function jsonpFetch(url) {
+  return new Promise((resolve, reject) => {
+    const cb = "cb_" + Math.random().toString(36).substring(2);
+    window[cb] = (data) => { try { resolve(data); } finally { delete window[cb]; script.remove(); } };
+    const script = document.createElement("script");
+    script.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cb;
+    script.onerror = () => { delete window[cb]; script.remove(); reject(new Error("JSONP load error")); };
+    document.head.appendChild(script);
+  });
+}
+
+/* -------------------------
+   fetch wrapper (fetch then JSONP)
+------------------------- */
+async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
-  const res = await fetch(API_URL + "?" + new URLSearchParams(params));
-  return await res.json();
+  const qs = new URLSearchParams(params).toString();
+  const url = API_URL + "?" + qs;
+  try {
+    const res = await fetch(url, { method: "GET", mode: "cors" });
+    if (!res.ok) return await jsonpFetch(url);
+    const json = await res.json();
+    if (json && typeof json.success !== "undefined") return json;
+    return await jsonpFetch(url);
+  } catch (err) {
+    try { return await jsonpFetch(url); } catch (e) { throw err; }
+  }
 }
 
-/* ================= LOAD ================= */
+/* -------------------------
+   client state
+------------------------- */
+let rawRows = []; // full data from getAll/getByCabang/getByPlat
+let driverCabangMap = {}; // normalizedName -> cabang
+let currentKeys = []; // current table headers (keys order)
+
+/* -------------------------
+   helper: normalize name (used for matching)
+------------------------- */
+function normalizeName(s) {
+  if (!s && s !== 0) return "";
+  return String(s).trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/* -------------------------
+   parse date flexible (client)
+   - supports yyyy-mm-dd, dd/MM/yyyy, dd-MM-yyyy, timestamp, Date()
+   returns Date or null
+------------------------- */
+function parseDateFlexibleClient(str) {
+  if (str === null || typeof str === 'undefined') return null;
+  str = String(str).trim();
+  if (str === '') return null;
+  // Try ISO / Date parse
+  const d1 = new Date(str);
+  if (!isNaN(d1.getTime())) return new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  // dd/MM/yyyy
+  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  // dd-MM-yyyy
+  m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  // dd MM yyyy (space)
+  m = str.match(/^(\d{1,2})\s+(\d{1,2})\s+(\d{4})$/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return null;
+}
+
+/* -------------------------
+   format date dd-MM-yyyy
+------------------------- */
+function formatDateDDMMYYYY(d) {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  return dd + "-" + mm + "-" + yyyy;
+}
+
+/* -------------------------
+   Format cell value if it's date-like or column is date
+   - key: header name
+   - value: cell value
+------------------------- */
+function formatIfDate(key, value) {
+  if (value === null || typeof value === 'undefined') return '';
+  // detect if key sounds like date
+  const kl = String(key || '').toLowerCase();
+  const isDateKey = kl.indexOf('tanggal') !== -1 || kl.indexOf('tgl') !== -1 || kl.indexOf('date') !== -1;
+  // if key indicates date or value looks like date -> try parse
+  if (isDateKey || String(value).match(/^(\d{1,4})[\/\-\s]/)) {
+    const d = parseDateFlexibleClient(value);
+    if (d) return formatDateDDMMYYYY(d);
+  }
+  return value;
+}
+
+/* -------------------------
+   Build driverCabangMap from rawRows (last known)
+------------------------- */
+function buildDriverCabangMap(rows) {
+  driverCabangMap = {};
+  if (!rows || !rows.length) return;
+  // detect keys heuristically using first row
+  const first = rows[0] || {};
+  const keys = Object.keys(first);
+  let driverKey = null, cabangKey = null;
+  for (const k of keys) {
+    const kl = k.toLowerCase();
+    if (!driverKey && (kl.indexOf('driver') !== -1 || kl.indexOf('nama') !== -1 || kl.indexOf('username') !== -1)) driverKey = k;
+    if (!cabangKey && (kl.indexOf('cabang') !== -1 || kl.indexOf('branch') !== -1)) cabangKey = k;
+  }
+  if (!driverKey) driverKey = 'Driver';
+  if (!cabangKey) cabangKey = 'Cabang';
+  // scan rows, later rows override earlier
+  for (let i=0;i<rows.length;i++){
+    const r = rows[i];
+    const dv = r[driverKey] || r['Driver'] || r['Nama'] || r['username'] || r['Username'];
+    const cab = r[cabangKey] || r['Cabang'] || r['cabang'] || '';
+    if (!dv && dv !== 0) continue;
+    driverCabangMap[normalizeName(dv)] = (cab || '').toString().trim();
+  }
+}
+
+/* -------------------------
+   Populate missingCabangFilter dropdown from rawRows unique cabang
+------------------------- */
+function populateMissingCabangDropdown() {
+  const sel = document.getElementById('missingCabangFilter');
+  const curr = sel.value || '';
+  const set = new Set();
+  for (const r of rawRows) {
+    // find cabang key
+    const keys = Object.keys(r);
+    let cabVal = null;
+    for (const k of keys) {
+      const kl = k.toLowerCase();
+      if (kl.indexOf('cabang') !== -1 || kl.indexOf('branch') !== -1) { cabVal = r[k]; break; }
+    }
+    if (cabVal === null) cabVal = r['Cabang'] || r['cabang'] || '';
+    const t = (cabVal || '').toString().trim();
+    if (t !== '') set.add(t);
+  }
+  const arr = Array.from(set).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+  sel.innerHTML = '';
+  const optAll = document.createElement('option');
+  optAll.value = ''; optAll.textContent = 'Semua cabang';
+  sel.appendChild(optAll);
+  for (const c of arr) {
+    const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o);
+  }
+  if (curr) sel.value = curr;
+}
+
+/* -------------------------
+   LOAD ALL (getAll / getByCabang / getByPlat)
+------------------------- */
 async function loadAll() {
-  status.textContent = 'Memuat...';
-  const cab = filterCabang.value.trim();
-  const plat = filterPlat.value.trim();
+  document.getElementById('status').textContent = 'Memuat...';
+  try {
+    const cab = document.getElementById('filterCabang').value.trim();
+    const plat = document.getElementById('filterPlat').value.trim();
+    let res;
+    if (cab) res = await fetchApi({ action: 'getByCabang', cabang: cab });
+    else if (plat) res = await fetchApi({ action: 'getByPlat', plat: plat });
+    else res = await fetchApi({ action: 'getAll' });
 
-  let res;
-  if (cab) res = await fetchApi({action:'getByCabang', cabang:cab});
-  else if (plat) res = await fetchApi({action:'getByPlat', plat});
-  else res = await fetchApi({action:'getAll'});
-
-  rawRows = res.data || [];
-  currentKeys = rawRows[0] ? Object.keys(rawRows[0]) : [];
-  currentPage = 1;
-  renderTable();
-  status.textContent = `Selesai. ${rawRows.length} baris.`;
+    rawRows = res.data || [];
+    // set current keys from first row or empty
+    currentKeys = (rawRows.length > 0) ? Object.keys(rawRows[0]) : [];
+    buildDriverCabangMap(rawRows);
+    populateMissingCabangDropdown();
+    currentPage = 1;
+    renderRawTablePaged(); // paginated render
+    document.getElementById('status').textContent = 'Selesai. ' + rawRows.length + ' baris (sumber).';
+  } catch (err) {
+    document.getElementById('status').textContent = 'Error: ' + (err.message || err);
+    console.error(err);
+  }
 }
 
-/* ================= RENDER ================= */
-function renderTable(){
-  thead.innerHTML = tbody.innerHTML = '';
-  if(!rawRows.length){
+/* -------------------------
+   Render raw table with pagination
+------------------------- */
+function renderRawTablePaged() {
+  const thead = document.getElementById('thead');
+  const tbody = document.getElementById('tbody');
+  thead.innerHTML = ''; tbody.innerHTML = '';
+
+  if (!rawRows || rawRows.length === 0) {
     thead.innerHTML = '<tr><th>Tidak ada data</th></tr>';
+    document.getElementById('paginationControls').style.display = 'none';
     return;
   }
 
-  thead.innerHTML =
-    '<tr>' + currentKeys.map(k=>`<th>${k}</th>`).join('') + '</tr>';
+  // ensure currentKeys set
+  if (!currentKeys || currentKeys.length === 0) currentKeys = Object.keys(rawRows[0]);
 
-  const start = (currentPage-1)*pageSize;
-  rawRows.slice(start, start+pageSize).forEach(r=>{
-    tbody.insertAdjacentHTML('beforeend',
-      '<tr>' + currentKeys.map(k=>`<td>${r[k]??''}</td>`).join('') + '</tr>'
-    );
+  // header
+  const trh = document.createElement('tr');
+  currentKeys.forEach(k => {
+    const th = document.createElement('th');
+    th.textContent = k;
+    trh.appendChild(th);
   });
+  thead.appendChild(trh);
 
-  paginationControls.style.display =
-    rawRows.length > pageSize ? 'flex':'none';
+  // pagination math
+  const total = rawRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (currentPage < 1) currentPage = 1;
+  if (currentPage > totalPages) currentPage = totalPages;
 
-  spanTotalPages.textContent = Math.ceil(rawRows.length/pageSize);
-  inputPage.value = currentPage;
+  const start = (currentPage - 1) * pageSize;
+  const slice = rawRows.slice(start, start + pageSize);
+
+  // rows
+  for (const r of slice) {
+    const tr = document.createElement('tr');
+    for (const k of currentKeys) {
+      const td = document.createElement('td');
+      let v = r[k];
+      // format date cells if appropriate
+      v = formatIfDate(k, v);
+      td.textContent = (v === null || typeof v === 'undefined') ? '' : v;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  // pagination controls
+  document.getElementById('paginationControls').style.display = (totalPages > 1 ? 'flex' : 'none');
+  document.getElementById('spanTotalPages').textContent = String(totalPages);
+  document.getElementById('inputPage').value = String(currentPage);
+
+  // attach prev/next disabled state
+  document.getElementById('btnPrevPage').disabled = (currentPage <= 1);
+  document.getElementById('btnNextPage').disabled = (currentPage >= totalPages);
 }
 
-/* ================= MISSING ================= */
-btnMissingLastNDays.onclick = async ()=>{
-  const n = Number(missingDaysCount.value)||7;
-  const res = await fetchApi({
-    action:'missingLastNDays',
-    n,
-    excludeSundays: excludeSundays2.checked?'true':'false'
-  });
+/* -------------------------
+   Pagination event handlers
+------------------------- */
+document.getElementById('btnPrevPage').addEventListener('click', () => {
+  currentPage = Math.max(1, currentPage - 1);
+  renderRawTablePaged();
+});
+document.getElementById('btnNextPage').addEventListener('click', () => {
+  const totalPages = Math.max(1, Math.ceil((rawRows.length || 0) / pageSize));
+  currentPage = Math.min(totalPages, currentPage + 1);
+  renderRawTablePaged();
+});
+document.getElementById('inputPage').addEventListener('change', (e) => {
+  let v = Number(e.target.value) || 1;
+  const totalPages = Math.max(1, Math.ceil((rawRows.length || 0) / pageSize));
+  if (v < 1) v = 1;
+  if (v > totalPages) v = totalPages;
+  currentPage = v;
+  renderRawTablePaged();
+});
 
-  const per = res.result?.perDriverMissingDays || {};
-  rawRows = Object.keys(per).map(d=>({
-    Driver:d,
-    'Total Missing':per[d].length,
-    'Missing Days':per[d].join(', ')
-  }));
-  currentKeys = ['Driver','Total Missing','Missing Days'];
+/* -------------------------
+   MissingLastNDays functions (same as before) but apply cabang filter on client
+------------------------- */
+async function fetchMissingLastNDays(n) {
+  return await fetchApi({
+    action: 'missingLastNDays',
+    n: String(n),
+    excludeSundays: document.getElementById('excludeSundays2').checked ? 'true' : 'false'
+  });
+}
+
+function driverMatchesCabang(driverName, selCabang) {
+  if (!selCabang || selCabang.toString().trim() === '') return true;
+  const key = normalizeName(driverName);
+  const cabKnown = driverCabangMap[key] || '';
+  return cabKnown.toString().trim().toLowerCase() === selCabang.toString().trim().toLowerCase();
+}
+
+function showMissingLastNDays(n, resultObj) {
+  document.getElementById('missingResults').style.display = 'block';
+  const missingAll = resultObj.missingAll || [];
+  const per = resultObj.perDriverMissingDays || {};
+  const selCabang = document.getElementById('missingCabangFilter').value || '';
+
+  const missingFiltered = missingAll.filter(name => driverMatchesCabang(name, selCabang));
+
+  document.getElementById('missingSummary').textContent =
+    "Periode: last " + n + " hari — Driver tidak submit (filter cabang: " + (selCabang || "Semua") + "): " + missingFiltered.length;
+
+  const content = document.getElementById('missingContent');
+  content.innerHTML = '';
+
+  const block1 = document.createElement('div');
+  block1.innerHTML = "<strong>Driver tidak submit sama sekali:</strong>";
+  if (missingFiltered.length === 0) {
+    block1.innerHTML += " <span class='small'>Tidak ada</span>";
+  } else {
+    const ul = document.createElement('ul');
+    missingFiltered.forEach(d => {
+      const li = document.createElement('li');
+      const cab = driverCabangMap[normalizeName(d)] || '';
+      li.textContent = cab ? (d + " — " + cab) : d;
+      ul.appendChild(li);
+    });
+    block1.appendChild(ul);
+  }
+  content.appendChild(block1);
+
+  const table = document.createElement('table');
+  table.style.marginTop = '12px';
+  const header = document.createElement('tr');
+  header.innerHTML = "<th>Driver</th><th>Missing Days</th><th>Total</th>";
+  table.appendChild(header);
+
+  const drivers = Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+  for (const drv of drivers) {
+    if (!driverMatchesCabang(drv, selCabang)) continue;
+    const days = per[drv];
+    const tr = document.createElement('tr');
+    const cab = driverCabangMap[normalizeName(drv)] || '';
+    const displayName = cab ? (drv + " — " + cab) : drv;
+    tr.innerHTML = "<td>" + displayName + "</td><td>" + days.join(", ") + "</td><td>" + days.length + "</td>";
+    table.appendChild(tr);
+  }
+  content.appendChild(table);
+}
+
+/* -------------------------
+   Write missing to table (client) - replaces main table and resets pagination
+------------------------- */
+function writeMissingLastNDaysToTable(n, resultObj) {
+  // Build rows from perDriverMissingDays (convert to array of objects for table)
+  const per = resultObj.perDriverMissingDays || {};
+  const selCabang = document.getElementById('missingCabangFilter').value || '';
+  const rows = [];
+  const keys = ['Driver', 'Missing Days', 'Total Missing'];
+  for (const drv of Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}))) {
+    if (!driverMatchesCabang(drv, selCabang)) continue;
+    const cab = driverCabangMap[normalizeName(drv)] || '';
+    rows.push({
+      'Driver': cab ? (drv + " — " + cab) : drv,
+      'Missing Days': per[drv].join(', '),
+      'Total Missing': String(per[drv].length)
+    });
+  }
+  // replace rawRows with rows for table rendering (client-only)
+  rawRows = rows;
+  currentKeys = keys;
   currentPage = 1;
-  renderTable();
-};
+  renderRawTablePaged();
+}
 
 /* ================= EXCEL (GANTI CSV) ================= */
 btnDownloadMissingLastNDaysExcel.onclick = ()=>{
@@ -176,14 +474,51 @@ btnDownloadMissingLastNDaysExcel.onclick = ()=>{
   );
 };
 
-/* ================= EVENTS ================= */
-btnRefresh.onclick = loadAll;
-btnPrevPage.onclick = ()=>{if(currentPage>1){currentPage--;renderTable();}};
-btnNextPage.onclick = ()=>{currentPage++;renderTable();};
-inputPage.onchange = ()=>{currentPage=Number(inputPage.value)||1;renderTable();};
+/* -------------------------
+   Events
+------------------------- */
+document.getElementById('btnRefresh').addEventListener('click', loadAll);
+document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key === 'Enter') loadAll(); });
+document.getElementById('filterPlat').addEventListener('keyup', (e)=>{ if (e.key === 'Enter') loadAll(); });
 
-/* ================= INIT ================= */
+document.getElementById('btnMissingLastNDays').addEventListener('click', async ()=>{
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    showMissingLastNDays(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async ()=>{
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    writeMissingLastNDaysToTable(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('click', async ()=>{
+  try {
+    const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    const res = await fetchMissingLastNDays(n);
+    downloadMissingLastNDaysCSV(n, res.result || { missingAll: [], perDriverMissingDays: {} });
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+    console.error(err);
+  }
+});
+
+/* -------------------------
+   initial load
+------------------------- */
 loadAll();
+
 </script>
 </body>
 </html>
