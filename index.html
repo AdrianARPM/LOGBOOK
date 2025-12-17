@@ -1,187 +1,168 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <title>LOGBOOK — Monitoring Inspeksi & Missing Driver</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<title>LOGBOOK BAWDI — Monitoring Inspeksi</title>
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- Tailwind CSS -->
-<script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS (Excel) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
-<!-- SheetJS (Excel) -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
-
-<!-- jsPDF + autoTable -->
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
-
+  <!-- jsPDF -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
-<body class="bg-slate-100 min-h-screen p-4">
 
-<div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6">
+<body class="bg-slate-100 min-h-screen p-6">
+<div class="max-w-7xl mx-auto bg-white rounded-xl shadow p-6">
 
-<h1 class="text-2xl font-bold text-slate-800 mb-6">
+<h1 class="text-2xl font-bold mb-6">
   LOGBOOK — Monitoring Inspeksi & Missing Driver
 </h1>
 
 <!-- FILTER -->
-<div class="flex flex-wrap gap-3 mb-4">
-  <input id="filterCabang" class="border rounded-lg px-3 py-2 w-48" placeholder="Filter cabang">
-  <input id="filterPlat" class="border rounded-lg px-3 py-2 w-48" placeholder="Filter plat">
-
-  <select id="missingCabangFilter" class="border rounded-lg px-3 py-2 w-56">
-    <option value="">Semua cabang</option>
+<div class="grid md:grid-cols-5 gap-3 mb-4">
+  <input id="filterCabang" class="input" placeholder="Filter Cabang">
+  <input id="filterPlat" class="input" placeholder="Filter Plat">
+  <select id="missingCabangFilter" class="input">
+    <option value="">Semua Cabang</option>
   </select>
-
-  <button id="btnRefresh" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-    Refresh
-  </button>
+  <input id="missingDaysCount" type="number" value="7" min="1" class="input">
+  <button id="btnRefresh" class="btn-blue">Refresh</button>
 </div>
 
-<!-- ACTIONS -->
-<div class="flex flex-wrap gap-3 mb-4">
-  <input id="missingDaysCount" type="number" min="1" value="7"
-         class="border rounded-lg px-3 py-2 w-24">
+<!-- ACTION -->
+<div class="flex flex-wrap gap-3 mb-4 items-center">
+  <label class="flex items-center gap-2 text-sm">
+    <input id="excludeSundays" type="checkbox" class="scale-110">
+    Exclude Hari Minggu
+  </label>
 
-  <button id="btnMissingLastNDays"
-          class="bg-orange-500 text-white px-4 py-2 rounded-lg">
-    Cek Missing N Hari
-  </button>
-
-  <button id="btnExportExcel"
-          class="bg-emerald-600 text-white px-4 py-2 rounded-lg">
-    Download Excel
-  </button>
-
-  <button id="btnExportPDF"
-          class="bg-red-600 text-white px-4 py-2 rounded-lg">
-    Download PDF
-  </button>
+  <button id="btnMissing" class="btn-orange">Cek Missing N Hari</button>
+  <button id="btnExcel" class="btn-green">Download Excel</button>
+  <button id="btnPDF" class="btn-red">Download PDF</button>
 </div>
 
-<div id="status" class="text-sm text-slate-500 mb-2">Memuat...</div>
+<p id="status" class="text-sm text-slate-500 mb-3">Memuat...</p>
 
 <!-- TABLE -->
-<div class="overflow-x-auto">
-<table class="w-full border text-sm">
-  <thead id="thead" class="bg-cyan-600 text-white"></thead>
+<div class="overflow-auto">
+<table class="min-w-full text-sm border" id="tbl">
+  <thead class="bg-cyan-600 text-white" id="thead"></thead>
   <tbody id="tbody"></tbody>
 </table>
-</div>
-
-<!-- PAGINATION -->
-<div id="pagination" class="flex items-center gap-3 mt-4 hidden">
-  <button id="prevPage" class="px-3 py-1 border rounded">&laquo;</button>
-  <span class="text-sm">Page</span>
-  <input id="pageInput" type="number" min="1" value="1"
-         class="border rounded w-16 text-center">
-  <span class="text-sm">/ <span id="totalPages">1</span></span>
-  <button id="nextPage" class="px-3 py-1 border rounded">&raquo;</button>
 </div>
 
 </div>
 
 <script>
-/* ================== CONFIG ================== */
+/* ================= CONFIG ================= */
 const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec";
 const API_KEY = "KEY-2025";
-const PAGE_SIZE = 50;
 
-/* ================== STATE ================== */
+/* ================= STATE ================= */
 let rawRows = [];
-let keys = [];
-let page = 1;
+let currentKeys = [];
 
-/* ================== FETCH ================== */
-async function fetchApi(params){
+/* ================= FETCH ================= */
+async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
-  const qs = new URLSearchParams(params).toString();
-  const url = API_URL + "?" + qs;
+  const url = API_URL + "?" + new URLSearchParams(params);
   const res = await fetch(url);
   return await res.json();
 }
 
-/* ================== LOAD ================== */
-async function loadAll(){
+/* ================= LOAD ALL ================= */
+async function loadAll() {
   document.getElementById("status").textContent = "Memuat...";
-  const cab = filterCabang.value.trim();
-  const plat = filterPlat.value.trim();
-  let res;
-
-  if(cab) res = await fetchApi({action:"getByCabang", cabang:cab});
-  else if(plat) res = await fetchApi({action:"getByPlat", plat:plat});
-  else res = await fetchApi({action:"getAll"});
-
+  const res = await fetchApi({ action: "getAll" });
   rawRows = res.data || [];
-  keys = rawRows.length ? Object.keys(rawRows[0]) : [];
-  page = 1;
-  render();
+  currentKeys = rawRows[0] ? Object.keys(rawRows[0]) : [];
+  renderTable(rawRows);
   document.getElementById("status").textContent =
-    `Selesai. ${rawRows.length} baris.`;
+    `Selesai. ${rawRows.length} baris`;
 }
 
-/* ================== RENDER ================== */
-function render(){
+/* ================= TABLE ================= */
+function renderTable(rows) {
   const thead = document.getElementById("thead");
   const tbody = document.getElementById("tbody");
   thead.innerHTML = tbody.innerHTML = "";
 
-  if(!rawRows.length){
-    thead.innerHTML = "<tr><th class='p-3'>Tidak ada data</th></tr>";
+  if (!rows.length) {
+    thead.innerHTML = "<tr><th>Tidak ada data</th></tr>";
     return;
   }
 
-  thead.innerHTML = "<tr>" + keys.map(k=>`<th class="p-2">${k}</th>`).join("") + "</tr>";
+  thead.innerHTML =
+    "<tr>" + currentKeys.map(k => `<th class="px-2 py-2">${k}</th>`).join("") + "</tr>";
 
-  const start = (page-1)*PAGE_SIZE;
-  const slice = rawRows.slice(start, start+PAGE_SIZE);
-
-  slice.forEach(r=>{
+  rows.forEach(r => {
     const tr = document.createElement("tr");
-    tr.innerHTML = keys.map(k=>`<td class="border p-2">${r[k] ?? ""}</td>`).join("");
+    tr.innerHTML = currentKeys.map(k =>
+      `<td class="border px-2 py-1">${r[k] ?? ""}</td>`
+    ).join("");
     tbody.appendChild(tr);
   });
-
-  const totalPages = Math.ceil(rawRows.length/PAGE_SIZE);
-  pagination.classList.toggle("hidden", totalPages<=1);
-  pageInput.value = page;
-  totalPagesEl.textContent = totalPages;
 }
 
-/* ================== EXPORT EXCEL ================== */
-function exportExcel(){
+/* ================= MISSING ================= */
+document.getElementById("btnMissing").onclick = async () => {
+  const n = Number(document.getElementById("missingDaysCount").value || 7);
+  const exclude = document.getElementById("excludeSundays").checked;
+
+  const res = await fetchApi({
+    action: "missingLastNDays",
+    n,
+    excludeSundays: exclude ? "true" : "false"
+  });
+
+  const per = res.result?.perDriverMissingDays || {};
+  const rows = Object.keys(per).map(d => ({
+    Driver: d,
+    "Total Missing": per[d].length,
+    "Tanggal Kosong": per[d].join(", ")
+  }));
+
+  rawRows = rows;
+  currentKeys = ["Driver", "Total Missing", "Tanggal Kosong"];
+  renderTable(rawRows);
+};
+
+/* ================= EXCEL ================= */
+document.getElementById("btnExcel").onclick = () => {
   const ws = XLSX.utils.json_to_sheet(rawRows);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Logbook");
-  XLSX.writeFile(wb, "logbook_inspeksi.xlsx");
-}
+  XLSX.utils.book_append_sheet(wb, ws, "Missing");
+  XLSX.writeFile(wb, "missing_driver.xlsx");
+};
 
-/* ================== EXPORT PDF ================== */
-function exportPDF(){
+/* ================= PDF ================= */
+document.getElementById("btnPDF").onclick = () => {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({orientation:"landscape"});
-  doc.text("LOGBOOK INSPEKSI", 14, 12);
+  const doc = new jsPDF("l", "pt", "a4");
+  doc.text("Missing Driver Logbook", 40, 40);
   doc.autoTable({
-    startY: 18,
-    head:[keys],
-    body: rawRows.map(r=>keys.map(k=>r[k])),
-    styles:{fontSize:7}
+    startY: 60,
+    head: [currentKeys],
+    body: rawRows.map(r => currentKeys.map(k => r[k])),
   });
-  doc.save("logbook_inspeksi.pdf");
-}
+  doc.save("missing_driver.pdf");
+};
 
-/* ================== EVENTS ================== */
-btnRefresh.onclick = loadAll;
-btnExportExcel.onclick = exportExcel;
-btnExportPDF.onclick = exportPDF;
-
-prevPage.onclick = ()=>{ if(page>1){page--;render();} };
-nextPage.onclick = ()=>{ page++;render(); };
-pageInput.onchange = ()=>{ page = Number(pageInput.value)||1; render(); };
-
+/* ================= INIT ================= */
 loadAll();
 </script>
 
+<style>
+.input{ @apply border rounded px-3 py-2 w-full }
+.btn-blue{ @apply bg-blue-600 text-white px-4 py-2 rounded }
+.btn-orange{ @apply bg-orange-500 text-white px-4 py-2 rounded }
+.btn-green{ @apply bg-green-600 text-white px-4 py-2 rounded }
+.btn-red{ @apply bg-red-600 text-white px-4 py-2 rounded }
+</style>
 </body>
 </html>
