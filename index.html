@@ -212,6 +212,7 @@ tbody tr:hover {
   }
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 </head>
 <body>
@@ -244,6 +245,8 @@ tbody tr:hover {
         <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
         <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel</button>
         <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
+        <button id="btnDownloadMissingLastNDaysExcel">Download Excel</button>
+
 
         <label style="display:flex; gap:6px; align-items:center; margin-left:8px;">
           <input id="excludeSundays2" type="checkbox">
@@ -670,6 +673,41 @@ function downloadMissingLastNDaysCSV(n, resultObj) {
   }
   downloadCSV('missing_last_' + n + '_days_filtered.csv', rows);
 }
+  
+  function downloadMissingLastNDaysExcel(n, resultObj) {
+  const per = resultObj.perDriverMissingDays || {};
+  const selCabang = document.getElementById('missingCabangFilter').value || '';
+
+  const data = [];
+  data.push(['Driver', 'Cabang', 'Total Missing', 'Missing Days']);
+
+  const drivers = Object.keys(per).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+
+  for (const drv of drivers) {
+    if (!driverMatchesCabang(drv, selCabang)) continue;
+
+    const days = per[drv];
+    const cab = driverCabangMap[normalizeName(drv)] || '';
+
+    data.push([
+      drv,
+      cab,
+      days.length,
+      days.join('; ')
+    ]);
+  }
+
+  const worksheet = XLSX.utils.aoa_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Missing Driver');
+
+  XLSX.writeFile(
+    workbook,
+    `missing_last_${n}_days_filtered.xlsx`
+  );
+}
 
 /* -------------------------
    CSV util
@@ -729,6 +767,23 @@ document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('clic
     console.error(err);
   }
 });
+  document.getElementById('btnDownloadMissingLastNDaysExcel')
+  .addEventListener('click', async () => {
+    try {
+      const n = Number(
+        document.getElementById('missingDaysCount').value
+      ) || 7;
+
+      const res = await fetchMissingLastNDays(n);
+      downloadMissingLastNDaysExcel(
+        n,
+        res.result || { perDriverMissingDays: {} }
+      );
+    } catch (err) {
+      alert('Error: ' + (err.message || err));
+      console.error(err);
+    }
+  });
 
 /* -------------------------
    initial load
