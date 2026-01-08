@@ -356,23 +356,24 @@ function normalizeName(s) {
    returns Date or null
 ------------------------- */
 function parseDateFlexibleClient(str) {
-  if (str === null || typeof str === 'undefined') return null;
+  if (!str) return null;
   str = String(str).trim();
-  if (str === '') return null;
-  // Try ISO / Date parse
-  const d1 = new Date(str);
-  if (!isNaN(d1.getTime())) return new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
+
+  // yyyy-mm-dd
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+
   // dd/MM/yyyy
-  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+
   // dd-MM-yyyy
   m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-  // dd MM yyyy (space)
-  m = str.match(/^(\d{1,2})\s+(\d{1,2})\s+(\d{4})$/);
-  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+
   return null;
 }
+
 
 /* -------------------------
    format date dd-MM-yyyy
@@ -384,6 +385,7 @@ function formatDateDDMMYYYY(d) {
   const yyyy = d.getFullYear();
   return dd + "-" + mm + "-" + yyyy;
 }
+Utilities.formatDate(date, 'Asia/Jakarta', 'HH:mm')
 
 /* -------------------------
    Format cell value if it's date-like or column is date
@@ -395,16 +397,38 @@ function formatIfDate(key, value) {
 
   const kl = String(key || '').toLowerCase();
 
-  // ⛔ EXCLUDE kolom JAM
+  // ⛔ HARD BLOCK: kolom JAM
   if (
     kl.includes('jam hadir') ||
     kl.includes('jam pulang') ||
-    kl.includes('jam')
+    kl === 'jam' ||
+    kl.includes('time')
   ) {
-    return value;
+    // jika Date object → ambil jam saja
+    if (value instanceof Date) {
+      return value.toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    }
+
+    // jika ISO string → extract HH:mm
+    if (typeof value === 'string' && value.includes('T')) {
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString('id-ID', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+      }
+    }
+
+    return value; // string normal "08:00"
   }
 
-  // ✅ hanya kolom tanggal
+  // ✅ HANYA kolom tanggal
   const isDateKey =
     kl.includes('tanggal') ||
     kl.includes('tgl') ||
