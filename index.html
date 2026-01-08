@@ -392,16 +392,32 @@ function formatDateDDMMYYYY(d) {
 ------------------------- */
 function formatIfDate(key, value) {
   if (value === null || typeof value === 'undefined') return '';
-  // detect if key sounds like date
+
   const kl = String(key || '').toLowerCase();
-  const isDateKey = kl.indexOf('tanggal') !== -1 || kl.indexOf('tgl') !== -1 || kl.indexOf('date') !== -1;
-  // if key indicates date or value looks like date -> try parse
-  if (isDateKey || String(value).match(/^(\d{1,4})[\/\-\s]/)) {
-    const d = parseDateFlexibleClient(value);
-    if (d) return formatDateDDMMYYYY(d);
+
+  // ⛔ EXCLUDE kolom JAM
+  if (
+    kl.includes('jam hadir') ||
+    kl.includes('jam pulang') ||
+    kl.includes('jam')
+  ) {
+    return value;
   }
+
+  // ✅ hanya kolom tanggal
+  const isDateKey =
+    kl.includes('tanggal') ||
+    kl.includes('tgl') ||
+    kl.includes('date');
+
+  if (!isDateKey) return value;
+
+  const d = parseDateFlexibleClient(value);
+  if (d) return formatDateDDMMYYYY(d);
+
   return value;
 }
+
 
 /* -------------------------
    Build driverCabangMap from rawRows (last known)
