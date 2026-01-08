@@ -230,6 +230,8 @@ tbody tr:hover {
         </select>
       </label>
       <button id="btnRefresh">Refresh / Apply</button>
+      <button id="btnExportLogbookExcel">Export Logbook (Excel)</button>
+
       <span class="small">Data berasal dari Apps Script API</span>
     </div>
 
@@ -728,6 +730,40 @@ function downloadCSV(filename, rows) {
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
 }
 
+function exportLogbookToExcel() {
+  if (!rawRows || rawRows.length === 0) {
+    alert('Tidak ada data logbook untuk diexport');
+    return;
+  }
+
+  const data = [];
+  data.push(currentKeys); // header
+
+  for (const row of rawRows) {
+    const line = [];
+    for (const key of currentKeys) {
+      let val = row[key];
+      val = formatIfDate(key, val);
+      line.push(val ?? '');
+    }
+    data.push(line);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Logbook');
+
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+
+  XLSX.writeFile(
+    wb,
+    `logbook_${yyyy}-${mm}-${dd}.xlsx`
+  );
+}
 /* -------------------------
    Events
 ------------------------- */
@@ -784,7 +820,8 @@ document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('clic
       console.error(err);
     }
   });
-
+document.getElementById('btnExportLogbookExcel')
+  .addEventListener('click', exportLogbookToExcel);
 /* -------------------------
    initial load
 ------------------------- */
