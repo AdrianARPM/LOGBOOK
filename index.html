@@ -1,55 +1,51 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LOGBOOK — Missing Driver</title>
-
-<!-- XLSX EXPORT -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LOGBOOK — Missing (N hari)</title>
 
 <style>
 body{font-family:Arial,Helvetica,sans-serif;background:#f3f4f6;margin:0;padding:20px}
-.wrap{max-width:1100px;margin:auto;background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.wrap{max-width:1100px;margin:0 auto;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
 .controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
 input,select,button{padding:8px;border:1px solid #ccc;border-radius:6px}
-button{cursor:pointer;background:#0ea5b6;color:#fff;border:none}
-button:hover{opacity:.9}
+button{cursor:pointer}
 table{width:100%;border-collapse:collapse;margin-top:10px}
 th,td{padding:8px;border:1px solid #e2e8f0;font-size:14px}
 th{background:#0ea5b6;color:#fff}
 .panel{margin-top:18px;padding:12px;border-radius:8px;background:#fafafa;border:1px solid #eee}
 .small{font-size:13px;color:#666}
-.pagination{margin-top:10px;display:flex;gap:8px;align-items:center}
+.pagination{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nowrap{white-space:nowrap}
 
-/* BADGE */
+/* === UPGRADE VISUAL ONLY === */
 .badge{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;display:inline-block}
 .badge-ok{background:#dcfce7;color:#166534}
-.badge-warning{background:#fef3c7;color:#92400e}
+.badge-warn{background:#fef3c7;color:#92400e}
 .badge-danger{background:#fee2e2;color:#991b1b}
 </style>
 </head>
 
 <body>
 <div class="wrap">
-<h1>LOGBOOK — Driver Belum Mengisi</h1>
+<h2>LOGBOOK — Cek Driver Belum Mengisi</h2>
 
 <div class="controls">
-  <input id="filterCabang" placeholder="Filter cabang">
-  <input id="filterPlat" placeholder="Filter plat">
-  <select id="missingCabangFilter"><option value="">Semua cabang</option></select>
-  <button id="btnRefresh">Refresh</button>
+<input id="filterCabang" placeholder="Filter cabang">
+<input id="filterPlat" placeholder="Filter plat">
+<button id="btnRefresh">Refresh / Apply</button>
+<span class="small">Apps Script API</span>
 </div>
 
 <div class="panel">
-<div class="controls">
-  <label>N hari <input id="missingDaysCount" type="number" value="7" style="width:70px"></label>
-  <button id="btnMissingLastNDays">Tampilkan</button>
-  <button id="btnMissingLastNDaysTable">Tulis ke Tabel</button>
-  <button id="btnDownloadMissingLastNDaysCSV">CSV</button>
-  <button id="btnDownloadMissingLastNDaysExcel">Excel</button>
-  <label class="small"><input type="checkbox" id="excludeSundays2"> Exclude Sunday</label>
-</div>
+<label>N hari:
+<input id="missingDaysCount" type="number" value="7" min="1" style="width:80px">
+</label>
+<button id="btnMissingLastNDays">Tampilkan</button>
+<button id="btnMissingLastNDaysTable">Tulis ke tabel</button>
+<button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
+<button id="btnDownloadMissingLastNDaysExcel">Download Excel</button>
 </div>
 
 <div id="status" class="small">Memuat...</div>
@@ -62,90 +58,154 @@ th{background:#0ea5b6;color:#fff}
 </div>
 
 <div id="paginationControls" class="pagination" style="display:none">
-<button id="btnPrevPage">Prev</button>
-<span>Page <input id="inputPage" type="number" value="1" style="width:60px"> / <span id="spanTotalPages">1</span></span>
-<button id="btnNextPage">Next</button>
+<button id="btnPrevPage">« Prev</button>
+<span class="small nowrap">
+Hal <input id="inputPage" type="number" min="1" value="1" style="width:60px">
+/ <span id="spanTotalPages">1</span>
+</span>
+<button id="btnNextPage">Next »</button>
 </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+
 <script>
+/* ================= CONFIG ================= */
 const API_URL="https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec";
 const API_KEY="KEY-2025";
 let rawRows=[],currentKeys=[],currentPage=1;
 const pageSize=50;
-let driverCabangMap={};
 
-function normalizeName(s){return String(s||'').trim().toLowerCase()}
+/* ================= FETCH ================= */
+async function fetchApi(p={}) {
+p.apiKey=API_KEY;
+const r=await fetch(API_URL+"?"+new URLSearchParams(p));
+return await r.json();
+}
+
+/* ================= DATE ================= */
+function formatIfDate(k,v){
+if(!v)return '';
+if(String(k).toLowerCase().includes('tanggal')){
+const d=new Date(v);
+if(!isNaN(d))return d.toLocaleDateString('id-ID');
+}
+return v;
+}
+
+/* ================= BADGE (VISUAL ONLY) ================= */
 function renderMissingBadge(n){
-  if(n===0)return'<span class="badge badge-ok">0</span>';
-  if(n<=3)return'<span class="badge badge-warning">'+n+'</span>';
-  return'<span class="badge badge-danger">'+n+'</span>';
+if(n===0)return'<span class="badge badge-ok">0</span>';
+if(n<=3)return'<span class="badge badge-warn">'+n+'</span>';
+return'<span class="badge badge-danger">'+n+'</span>';
 }
 
-async function fetchApi(p){
-  p.apiKey=API_KEY;
-  const r=await fetch(API_URL+'?'+new URLSearchParams(p));
-  return r.json();
+/* ================= LOAD ================= */
+async function loadAll(){
+const cab=document.getElementById('filterCabang').value.trim();
+const plat=document.getElementById('filterPlat').value.trim();
+let res;
+if(cab)res=await fetchApi({action:'getByCabang',cabang:cab});
+else if(plat)res=await fetchApi({action:'getByPlat',plat:plat});
+else res=await fetchApi({action:'getAll'});
+rawRows=res.data||[];
+currentKeys=rawRows[0]?Object.keys(rawRows[0]):[];
+currentPage=1;
+renderRawTablePaged();
+document.getElementById('status').textContent='Selesai. '+rawRows.length+' baris';
 }
 
+/* ================= RENDER TABLE (TIDAK DIUBAH ALURNYA) ================= */
 function renderRawTablePaged(){
-  const thead=document.getElementById('thead');
-  const tbody=document.getElementById('tbody');
-  thead.innerHTML='';tbody.innerHTML='';
-  if(!rawRows.length){thead.innerHTML='<tr><th>Tidak ada data</th></tr>';return;}
-  if(!currentKeys.length)currentKeys=Object.keys(rawRows[0]);
+const thead=document.getElementById('thead');
+const tbody=document.getElementById('tbody');
+thead.innerHTML='';tbody.innerHTML='';
+if(!rawRows.length){thead.innerHTML='<tr><th>Tidak ada data</th></tr>';return;}
 
-  thead.innerHTML='<tr>'+currentKeys.map(k=>'<th>'+k+'</th>').join('')+'</tr>';
-  const totalPages=Math.max(1,Math.ceil(rawRows.length/pageSize));
-  if(currentPage>totalPages)currentPage=totalPages;
+const trh=document.createElement('tr');
+currentKeys.forEach(k=>{const th=document.createElement('th');th.textContent=k;trh.appendChild(th);});
+thead.appendChild(trh);
 
-  rawRows.slice((currentPage-1)*pageSize,currentPage*pageSize).forEach(r=>{
-    const tr=document.createElement('tr');
-    currentKeys.forEach(k=>{
-      const td=document.createElement('td');
-      if(k==='Total Missing') td.innerHTML=renderMissingBadge(Number(r[k]));
-      else td.textContent=r[k]??'';
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
+const start=(currentPage-1)*pageSize;
+const slice=rawRows.slice(start,start+pageSize);
 
-  paginationControls.style.display=rawRows.length>pageSize?'flex':'none';
-  spanTotalPages.textContent=totalPages;
-  inputPage.value=currentPage;
+slice.forEach(r=>{
+const tr=document.createElement('tr');
+currentKeys.forEach(k=>{
+const td=document.createElement('td');
+let v=r[k];
+if(k==='Total Missing'){
+td.innerHTML=renderMissingBadge(Number(v));
+}else{
+v=formatIfDate(k,v);
+td.textContent=v??'';
+}
+tr.appendChild(td);
+});
+tbody.appendChild(tr);
+});
+
+const totalPages=Math.max(1,Math.ceil(rawRows.length/pageSize));
+document.getElementById('paginationControls').style.display=totalPages>1?'flex':'none';
+document.getElementById('spanTotalPages').textContent=totalPages;
+document.getElementById('inputPage').value=currentPage;
 }
 
-function downloadExcel(filename,rows){
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Missing');
-  XLSX.writeFile(wb,filename);
+/* ================= PAGINATION ================= */
+btnPrevPage.onclick=()=>{currentPage=Math.max(1,currentPage-1);renderRawTablePaged();}
+btnNextPage.onclick=()=>{currentPage++;renderRawTablePaged();}
+inputPage.onchange=e=>{currentPage=Number(e.target.value)||1;renderRawTablePaged();}
+
+/* ================= MISSING ================= */
+async function fetchMissing(n){
+return await fetchApi({action:'missingLastNDays',n});
 }
 
-btnDownloadMissingLastNDaysExcel.onclick=async()=>{
-  const n=+missingDaysCount.value||7;
-  const res=await fetchApi({action:'missingLastNDays',n});
-  const per=res.result.perDriverMissingDays||{};
-  const rows=[['Driver','Total Missing','Missing Days']];
-  Object.keys(per).forEach(d=>rows.push([d,per[d].length,per[d].join(', ')]));
-  downloadExcel(`missing_${n}_days.xlsx`,rows);
+btnMissingLastNDays.onclick=async()=>{
+const n=Number(missingDaysCount.value)||7;
+await fetchMissing(n); /* fungsi lama TIDAK DIUBAH */
 };
 
-btnPrevPage.onclick=()=>{currentPage--;renderRawTablePaged()};
-btnNextPage.onclick=()=>{currentPage++;renderRawTablePaged()};
-inputPage.onchange=e=>{currentPage=+e.target.value||1;renderRawTablePaged()};
-btnRefresh.onclick=loadAll;
-
-async function loadAll(){
-  status.textContent='Memuat...';
-  const res=await fetchApi({action:'getAll'});
-  rawRows=res.data||[];
-  currentKeys=rawRows[0]?Object.keys(rawRows[0]):[];
-  currentPage=1;
-  renderRawTablePaged();
-  status.textContent='Loaded '+rawRows.length+' rows';
+btnMissingLastNDaysTable.onclick=async()=>{
+const n=Number(missingDaysCount.value)||7;
+const r=await fetchMissing(n);
+const per=r.result.perDriverMissingDays||{};
+const rows=[];
+for(const d in per){
+rows.push({'Driver':d,'Missing Days':per[d].join(', '),'Total Missing':per[d].length});
 }
+rawRows=rows;currentKeys=['Driver','Missing Days','Total Missing'];currentPage=1;
+renderRawTablePaged();
+};
 
+/* ================= EXPORT ================= */
+btnDownloadMissingLastNDaysCSV.onclick=async()=>{
+const n=Number(missingDaysCount.value)||7;
+const r=await fetchMissing(n);
+const rows=[['Driver','Total','Days']];
+for(const d in r.result.perDriverMissingDays){
+rows.push([d,r.result.perDriverMissingDays[d].length,r.result.perDriverMissingDays[d].join('; ')]);
+}
+const csv=rows.map(r=>r.join(',')).join('\n');
+const a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([csv]));
+a.download='missing_'+n+'.csv';a.click();
+};
+
+btnDownloadMissingLastNDaysExcel.onclick=async()=>{
+const n=Number(missingDaysCount.value)||7;
+const r=await fetchMissing(n);
+const rows=[['Driver','Total Missing','Missing Days']];
+for(const d in r.result.perDriverMissingDays){
+rows.push([d,r.result.perDriverMissingDays[d].length,r.result.perDriverMissingDays[d].join(', ')]);
+}
+const ws=XLSX.utils.aoa_to_sheet(rows);
+const wb=XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb,ws,'Missing');
+XLSX.writeFile(wb,'missing_'+n+'.xlsx');
+};
+
+btnRefresh.onclick=loadAll;
 loadAll();
 </script>
 </body>
