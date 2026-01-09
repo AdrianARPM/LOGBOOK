@@ -211,6 +211,28 @@ tbody tr:hover {
     font-size: 13px;
   }
 }
+  .badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge-danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.badge-muted {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -572,7 +594,11 @@ function renderRawTablePaged() {
       let v = r[k];
       // format date cells if appropriate
       v = formatIfDate(k, v);
-      td.textContent = (v === null || typeof v === 'undefined') ? '' : v;
+      if (typeof v === 'string' && v.startsWith('<span')) {
+  td.innerHTML = v;
+} else {
+  td.textContent = (v === null || typeof v === 'undefined') ? '' : v;
+}
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
@@ -680,26 +706,36 @@ function showMissingLastNDays(n, resultObj) {
    Write missing to table (client) - replaces main table and resets pagination
 ------------------------- */
 function writeMissingLastNDaysToTable(n, resultObj) {
-  // Build rows from perDriverMissingDays (convert to array of objects for table)
   const per = resultObj.perDriverMissingDays || {};
   const selCabang = document.getElementById('missingCabangFilter').value || '';
+
   const rows = [];
   const keys = ['Driver', 'Missing Days', 'Total Missing'];
-  for (const drv of Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}))) {
+
+  for (const drv of Object.keys(per).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  )) {
     if (!driverMatchesCabang(drv, selCabang)) continue;
+
+    const total = per[drv].length;
     const cab = driverCabangMap[normalizeName(drv)] || '';
+    const driverName = cab ? `${drv} — ${cab}` : drv;
+
     rows.push({
-      'Driver': cab ? (drv + " — " + cab) : drv,
+      'Driver': driverName,
       'Missing Days': per[drv].join(', '),
-      'Total Missing': String(per[drv].length)
+      'Total Missing': total > 4
+        ? `<span class="badge badge-danger">${total}</span>`
+        : `<span class="badge badge-muted">${total}</span>`
     });
   }
-  // replace rawRows with rows for table rendering (client-only)
+
   rawRows = rows;
   currentKeys = keys;
   currentPage = 1;
-  renderRawTablePaged();
+  renderRawTablePaged(true); // ← penting
 }
+
 
 /* -------------------------
    CSV download (apply cabang filter)
