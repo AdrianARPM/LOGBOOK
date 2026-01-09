@@ -395,50 +395,52 @@ function formatDateDDMMYYYY(d) {
 function formatIfDate(key, value) {
   if (value === null || typeof value === 'undefined') return '';
 
-  const kl = String(key || '').toLowerCase();
+  const k = String(key).toLowerCase();
 
-  // ⛔ HARD BLOCK: kolom JAM
-  if (
-    kl.includes('jam hadir') ||
-    kl.includes('jam pulang') ||
-    kl === 'jam' ||
-    kl.includes('time')
-  ) {
-    // jika Date object → ambil jam saja
-    if (value instanceof Date) {
-      return value.toLocaleTimeString('id-ID', {
+  // ===== TIMESTAMP (tanggal + jam) =====
+  if (k === 'timestamp' || k.includes('waktu')) {
+    const d = (value instanceof Date) ? value : new Date(value);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleString('id-ID', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+    }
+    return value;
+  }
+
+  // ===== JAM (jam saja) =====
+  if (k.includes('jam hadir') || k.includes('jam pulang')) {
+    const d = (value instanceof Date) ? value : new Date(value);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString('id-ID', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
       });
     }
-
-    // jika ISO string → extract HH:mm
-    if (typeof value === 'string' && value.includes('T')) {
-      const d = new Date(value);
-      if (!isNaN(d.getTime())) {
-        return d.toLocaleTimeString('id-ID', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        });
-      }
-    }
-
-    return value; // string normal "08:00"
+    return value;
   }
 
-  // ✅ HANYA kolom tanggal
-  const isDateKey =
-    kl.includes('tanggal') ||
-    kl.includes('tgl') ||
-    kl.includes('date');
+  // ===== TANGGAL (tanggal saja) =====
+  if (k === 'tanggal' || k.includes('tgl')) {
+    const d = (value instanceof Date) ? value : new Date(value);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    }
+    return value;
+  }
 
-  if (!isDateKey) return value;
-
-  const d = parseDateFlexibleClient(value);
-  if (d) return formatDateDDMMYYYY(d);
-
+  // ===== DEFAULT =====
   return value;
 }
 
