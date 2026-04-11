@@ -1,909 +1,1127 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LOGBOOK — Missing (N hari) dengan Pagination & Tanggal dd-MM-yyyy</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Logbook — Dashboard Monitoring Driver</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-/* ===== CSS RESET & BASE ===== */
-* {
-  box-sizing: border-box;
+/* ═══════════════════════════════════════
+   CSS VARIABLES & RESET
+═══════════════════════════════════════ */
+:root {
+  --bg:        #f0f2f5;
+  --surface:   #ffffff;
+  --surface2:  #f7f8fa;
+  --border:    #e4e7ec;
+  --border2:   #d0d5dd;
+  --text:      #101828;
+  --text-soft: #344054;
+  --muted:     #667085;
+  --muted2:    #98a2b3;
+
+  --teal:      #0d9488;
+  --teal-lt:   #ccfbf1;
+  --teal-dim:  #0b7a70;
+  --teal-glow: rgba(13,148,136,.12);
+
+  --blue:      #2563eb;
+  --blue-lt:   #dbeafe;
+  --yellow:    #d97706;
+  --yellow-lt: #fef3c7;
+  --red:       #dc2626;
+  --red-lt:    #fee2e2;
+  --green:     #16a34a;
+  --green-lt:  #dcfce7;
+
+  --radius:    10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+  --shadow-md: 0 4px 16px rgba(16,24,40,.08), 0 2px 4px rgba(16,24,40,.04);
+  --shadow-lg: 0 12px 32px rgba(16,24,40,.1);
 }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
 
 body {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  background: linear-gradient(135deg, #f0fdfa, #f8fafc);
-  margin: 0;
-  padding: 24px;
-  color: #0f172a;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-/* ===== MAIN WRAPPER ===== */
-.wrap {
-  max-width: 1200px;
-  margin: auto;
-  background: #ffffff;
-  padding: 24px;
-  border-radius: 14px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--teal); }
 
-/* ===== HEADINGS ===== */
-h1 {
-  margin: 0 0 18px;
-  font-size: 24px;
-  font-weight: 700;
-}
+/* ═══════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════ */
+.app { max-width: 1380px; margin: 0 auto; padding: 24px 20px 48px; }
 
-h3 {
-  margin: 0 0 12px;
-  font-size: 18px;
-  font-weight: 600;
+/* ═══════════════════════════════════════
+   HEADER
+═══════════════════════════════════════ */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 14px; margin-bottom: 28px;
 }
+.header-left { display: flex; align-items: center; gap: 14px; }
+.header-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--teal), #0891b2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; box-shadow: 0 4px 12px rgba(13,148,136,.3);
+  flex-shrink: 0;
+}
+.header-title {
+  font-size: 22px; font-weight: 800;
+  color: var(--text); letter-spacing: -.3px;
+}
+.header-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-/* ===== CONTROLS / FILTER BAR ===== */
-.controls {
+/* ═══════════════════════════════════════
+   STAT CARDS
+═══════════════════════════════════════ */
+.stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px; margin-bottom: 22px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 18px 20px;
+  box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+  transition: box-shadow .2s, transform .2s;
+}
+.stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.stat-card::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.stat-card.c-total::after  { background: var(--teal); }
+.stat-card.c-hadir::after  { background: var(--blue); }
+.stat-card.c-missing::after{ background: var(--red); }
+.stat-card.c-cabang::after { background: var(--yellow); }
+
+.stat-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-bottom: 12px;
+}
+.stat-card.c-total  .stat-icon { background: var(--teal-lt); }
+.stat-card.c-hadir  .stat-icon { background: var(--blue-lt); }
+.stat-card.c-missing .stat-icon { background: var(--red-lt); }
+.stat-card.c-cabang .stat-icon { background: var(--yellow-lt); }
+.stat-num {
+  font-size: 30px; font-weight: 800; line-height: 1;
+  letter-spacing: -.5px; margin-bottom: 4px;
+}
+.stat-card.c-total  .stat-num { color: var(--teal); }
+.stat-card.c-hadir  .stat-num { color: var(--blue); }
+.stat-card.c-missing .stat-num { color: var(--red); }
+.stat-card.c-cabang .stat-num { color: var(--yellow); }
+.stat-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--muted);
 }
 
-.controls label {
-  font-size: 13px;
-  color: #475569;
+/* ═══════════════════════════════════════
+   FILTER CARD
+═══════════════════════════════════════ */
+.filter-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px 22px;
+  box-shadow: var(--shadow-sm); margin-bottom: 18px;
 }
-
-/* ===== FORM ELEMENTS ===== */
-input[type=text],
-input[type=number],
-select {
+.filter-card-title {
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--muted); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.filter-card-title::before {
+  content: ''; display: block; width: 4px; height: 14px;
+  background: var(--teal); border-radius: 2px;
+}
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; align-items: end;
+}
+.fgroup { display: flex; flex-direction: column; gap: 5px; }
+.flabel {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted);
+}
+.finput, .fselect {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  font-size: 14px;
-  transition: all .2s ease;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px; padding: 9px 12px;
+  outline: none; transition: border-color .15s, box-shadow .15s;
+  -webkit-appearance: none; appearance: none;
 }
-
-input:focus,
-select:focus {
-  outline: none;
-  border-color: #0ea5b7;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(14,165,183,.15);
+.fselect {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 32px;
 }
-
-/* ===== BUTTONS ===== */
-button {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: none;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  background: linear-gradient(135deg, #ff2aa6, #ff8a00);
-  color: white;
-  transition: transform .15s ease, box-shadow .15s ease, opacity .15s;
+.finput:focus, .fselect:focus {
+  border-color: var(--teal); background: #fff;
+  box-shadow: 0 0 0 3px var(--teal-glow);
 }
+.finput::placeholder { color: var(--muted2); }
 
-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(14,165,183,.35);
+/* ═══════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: none; border-radius: var(--radius); cursor: pointer;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px; font-weight: 600; padding: 9px 16px;
+  transition: all .15s; white-space: nowrap;
 }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 
-button:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-  box-shadow: none;
+.btn-primary { background: var(--teal); color: #fff; box-shadow: 0 2px 8px rgba(13,148,136,.25); }
+.btn-primary:hover:not(:disabled) { background: var(--teal-dim); box-shadow: 0 4px 14px rgba(13,148,136,.35); }
+
+.btn-secondary {
+  background: var(--surface); color: var(--text-soft);
+  border: 1.5px solid var(--border2); box-shadow: var(--shadow-sm);
 }
+.btn-secondary:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); background: var(--teal-lt); }
 
-/* ===== PANELS ===== */
+.btn-danger { background: var(--red-lt); color: var(--red); border: 1.5px solid #fecaca; }
+.btn-danger:hover:not(:disabled) { background: #fecaca; }
+
+.btn-sm { padding: 7px 12px; font-size: 12px; }
+.btn-icon { padding: 9px; }
+
+.filter-actions { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+
+/* ═══════════════════════════════════════
+   MISSING PANEL
+═══════════════════════════════════════ */
 .panel {
-  margin-top: 20px;
-  padding: 18px;
-  border-radius: 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px 22px;
+  box-shadow: var(--shadow-sm); margin-bottom: 18px;
+}
+.panel-title {
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--muted); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-title::before {
+  content: ''; display: block; width: 4px; height: 14px;
+  background: var(--red); border-radius: 2px;
+}
+.panel-row {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.missing-hint {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 12px; color: var(--muted);
+}
+.missing-hint code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--border); padding: 1px 5px; border-radius: 4px;
+  font-size: 11px;
 }
 
-/* ===== FLEX ROW ===== */
-.flexrow {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
+/* ═══════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════ */
+.status-bar {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 16px;
+  font-size: 12px; color: var(--muted);
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px; box-shadow: var(--shadow-sm);
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted2); flex-shrink: 0;
+  animation: pulse 2s infinite;
+}
+.status-dot.loading { background: var(--yellow); }
+.status-dot.ok  { background: var(--green); animation: none; }
+.status-dot.err { background: var(--red); animation: none; }
+@keyframes pulse {
+  0%,100% { opacity: 1; } 50% { opacity: .4; }
 }
 
-/* ===== SMALL TEXT ===== */
-.small {
-  font-size: 13px;
-  color: #64748b;
+/* ═══════════════════════════════════════
+   TABLE CARD
+═══════════════════════════════════════ */
+.table-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
+.table-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  gap: 10px; flex-wrap: wrap;
+}
+.table-toolbar-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 7px;
+}
+.row-badge {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 2px 10px;
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
-/* ===== TABLE ===== */
-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin-top: 12px;
-  font-size: 14px;
-}
-
-th {
-  background: linear-gradient(135deg, #ff2aa6, #ff8a00);
-  color: white;
-  padding: 12px;
-  text-align: left;
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-th:first-child {
-  border-top-left-radius: 10px;
-}
-
-th:last-child {
-  border-top-right-radius: 10px;
-}
-
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #e2e8f0;
-  color: #334155;
-}
-
-tbody tr:hover {
-  background: #f1f5f9;
-}
-.badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
+thead th {
+  background: var(--surface2);
+  color: var(--muted); font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1.2px;
+  padding: 11px 14px; text-align: left;
+  border-bottom: 1.5px solid var(--border);
+  position: sticky; top: 0; z-index: 2;
   white-space: nowrap;
 }
+thead th:first-child { border-radius: 0; padding-left: 18px; }
+thead th:last-child  { padding-right: 18px; }
 
-.badge-danger {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-soft); vertical-align: middle;
 }
+tbody td:first-child { padding-left: 18px; }
+tbody td:last-child  { padding-right: 18px; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: rgba(13,148,136,.03); }
 
-.badge-muted {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #e2e8f0;
+.cell-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--text-soft);
 }
+.cell-primary { font-weight: 600; color: var(--text); }
 
-/* ===== PAGINATION ===== */
+/* ═══════════════════════════════════════
+   BADGES
+═══════════════════════════════════════ */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.badge-danger  { background: var(--red-lt);    color: var(--red);    border: 1px solid #fecaca; }
+.badge-muted   { background: var(--surface2);  color: var(--muted);  border: 1px solid var(--border); }
+.badge-teal    { background: var(--teal-lt);   color: var(--teal);   border: 1px solid #99f6e4; }
+.badge-blue    { background: var(--blue-lt);   color: var(--blue);   border: 1px solid #bfdbfe; }
+.badge-yellow  { background: var(--yellow-lt); color: var(--yellow); border: 1px solid #fde68a; }
+
+/* ═══════════════════════════════════════
+   PAGINATION
+═══════════════════════════════════════ */
 .pagination {
-  margin-top: 16px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px; border-top: 1px solid var(--border);
+  gap: 10px; flex-wrap: wrap;
+}
+.page-info { font-size: 12px; color: var(--muted); }
+.page-controls { display: flex; gap: 6px; align-items: center; }
+.page-input {
+  width: 56px; text-align: center;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 7px; font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; padding: 6px 8px; outline: none;
+}
+.page-input:focus { border-color: var(--teal); }
+
+/* ═══════════════════════════════════════
+   MISSING RESULT PANEL (output)
+═══════════════════════════════════════ */
+#missingResults {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px 22px;
+  box-shadow: var(--shadow-sm); margin-bottom: 18px;
+}
+#missingResults h4 {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--red); margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+#missingResults h4::before {
+  content: ''; display: block; width: 4px; height: 14px;
+  background: var(--red); border-radius: 2px;
+}
+#missingSummary {
+  font-size: 12px; color: var(--muted); margin-bottom: 10px;
+  padding: 8px 12px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+#missingContent table { margin-top: 10px; }
+#missingContent table th { font-size: 10px; }
+#missingContent ul { padding-left: 20px; margin-top: 8px; }
+#missingContent li {
+  margin-bottom: 6px; font-size: 13px; color: var(--text-soft);
+  padding: 4px 0; border-bottom: 1px dashed var(--border);
 }
 
-.pagination input {
-  width: 80px;
-  text-align: center;
+/* ═══════════════════════════════════════
+   SEPARATOR / SECTION
+═══════════════════════════════════════ */
+.section-sep {
+  display: flex; align-items: center; gap: 12px; margin: 24px 0 16px;
+}
+.section-sep-line { flex: 1; height: 1px; background: var(--border); }
+.section-sep-text {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--muted2); white-space: nowrap;
 }
 
-/* ===== STATUS ===== */
-#status {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: #f1f5f9;
-  border-radius: 10px;
-  border: 1px dashed #cbd5f5;
+/* ═══════════════════════════════════════
+   SKELETON
+═══════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(90deg,var(--border) 25%,var(--surface2) 50%,var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px; height: 12px;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
-/* ===== MISSING RESULT ===== */
-#missingResults ul {
-  margin: 8px 0 0 18px;
+/* ═══════════════════════════════════════
+   EMPTY STATE
+═══════════════════════════════════════ */
+.empty-state {
+  text-align: center; padding: 60px 24px; color: var(--muted);
 }
+.empty-icon { font-size: 44px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; font-weight: 600; color: var(--text-soft); }
+.empty-state small { font-size: 12px; }
 
-#missingResults li {
-  margin-bottom: 4px;
+/* ═══════════════════════════════════════
+   TOAST
+═══════════════════════════════════════ */
+#toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--text); color: #fff;
+  border-radius: 10px; padding: 11px 20px;
+  font-size: 13px; font-weight: 500; z-index: 9999;
+  pointer-events: none; white-space: nowrap;
+  transition: transform .3s cubic-bezier(.32,.72,0,1);
+  box-shadow: var(--shadow-lg);
 }
+#toast.show { transform: translateX(-50%) translateY(0); }
+#toast.ok  { border-left: 3px solid var(--green); }
+#toast.err { border-left: 3px solid var(--red); }
+#toast.info{ border-left: 3px solid var(--teal); }
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 768px) {
-  body {
-    padding: 16px;
-  }
-
-  h1 {
-    font-size: 20px;
-  }
-
-  .wrap {
-    padding: 16px;
-  }
-
-  table {
-    font-size: 13px;
-  }
+/* ═══════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════ */
+@media (max-width: 640px) {
+  .app { padding: 14px 12px 48px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .header-title { font-size: 18px; }
 }
-  
 </style>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
 </head>
 <body>
-  <div class="wrap">
-    <h1>LOGBOOK — Cek Driver yang Belum Mengisi (N hari terakhir)</h1>
+<div class="app">
 
-    <!-- FILTER -->
-    <div class="controls">
-      <input id="filterCabang" placeholder="Filter cabang (APL MES)">
-      <input id="filterPlat" placeholder="Filter plat (BM 1234 ABA)">
-      <label style="display:flex; gap:8px; align-items:center;">
-        
-        <select id="missingCabangFilter" style="min-width:160px;">
-          <option value="">Semua cabang</option>
+  <!-- ═══ HEADER ═══ -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-icon">🚚</div>
+      <div>
+        <div class="header-title">Logbook Dashboard</div>
+        <div class="header-sub">Monitoring Kehadiran & Pengiriman Driver</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-secondary" id="btnRefresh">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+      <button class="btn btn-primary" id="btnExportLogbookExcel">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ STAT CARDS ═══ -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card c-total">
+      <div class="stat-icon">📋</div>
+      <div class="stat-num" id="statTotal">—</div>
+      <div class="stat-label">Total Data</div>
+    </div>
+    <div class="stat-card c-hadir">
+      <div class="stat-icon">✅</div>
+      <div class="stat-num" id="statHadir">—</div>
+      <div class="stat-label">Driver Hadir</div>
+    </div>
+    <div class="stat-card c-missing">
+      <div class="stat-icon">⚠️</div>
+      <div class="stat-num" id="statMissing">—</div>
+      <div class="stat-label">Belum Mengisi</div>
+    </div>
+    <div class="stat-card c-cabang">
+      <div class="stat-icon">🏢</div>
+      <div class="stat-num" id="statCabang">—</div>
+      <div class="stat-label">Cabang Aktif</div>
+    </div>
+  </div>
+
+  <!-- ═══ FILTER CARD ═══ -->
+  <div class="filter-card">
+    <div class="filter-card-title">Filter Data</div>
+    <div class="filter-grid">
+
+      <!-- Filter Cabang (dropdown) -->
+      <div class="fgroup">
+        <label class="flabel">Cabang</label>
+        <select id="filterCabangDropdown" class="fselect">
+          <option value="">Semua Cabang</option>
         </select>
-      </label>
-      <button id="btnRefresh">Refresh / Apply</button>
-      <button id="btnExportLogbookExcel">Export Logbook (Excel)</button>
-
-    </div>
-
-    <!-- PANEL: Missing N days -->
-    <div class="panel">
-      <h3>Cek driver yang belum mengisi (N hari terakhir)</h3>
-      <div class="flexrow" style="margin-bottom:8px;">
-        <label style="display:flex; gap:6px; align-items:center;">
-          N hari:
-          <input id="missingDaysCount" type="number" min="1" value="7" style="width:90px;">
-        </label>
-
-        <button id="btnMissingLastNDays">Tampilkan yang belum mengisi (N hari)</button>
-        <button id="btnMissingLastNDaysTable">Tulis ringkasan ke tabel</button>
-        <button id="btnDownloadMissingLastNDaysCSV">Download CSV</button>
-        <button id="btnDownloadMissingLastNDaysExcel">Download Excel</button>
-
-
-        <label style="display:flex; gap:6px; align-items:center; margin-left:8px;">
-          <input id="excludeSundays2" type="checkbox">
-          <span class="small">Exclude Sundays (hari Minggu dikecualikan)</span>
-        </label>
       </div>
 
-      <div class="small">
-        Memanggil endpoint <code>missingLastNDays</code> dan menampilkan per-driver tanggal kosong.
-        Gunakan dropdown "Pilih Cabang" untuk membatasi hasil pada cabang tertentu.
+      <!-- Filter Plat -->
+      <div class="fgroup">
+        <label class="flabel">Plat Kendaraan</label>
+        <input id="filterPlat" class="finput" placeholder="Contoh: BM 1234 ABA">
+      </div>
+
+      <!-- Filter Tanggal Dari -->
+      <div class="fgroup">
+        <label class="flabel">Tanggal Dari</label>
+        <input type="date" id="filterTglDari" class="finput">
+      </div>
+
+      <!-- Filter Tanggal Sampai -->
+      <div class="fgroup">
+        <label class="flabel">Tanggal Sampai</label>
+        <input type="date" id="filterTglSampai" class="finput">
+      </div>
+
+      <!-- Tombol -->
+      <div class="fgroup filter-actions">
+        <button class="btn btn-primary" id="btnApplyFilter">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          Terapkan
+        </button>
+        <button class="btn btn-secondary" id="btnResetFilter">Reset</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ MISSING N DAYS PANEL ═══ -->
+  <div class="panel">
+    <div class="panel-title">Cek Driver Belum Mengisi (N Hari Terakhir)</div>
+    <div class="panel-row">
+      <div class="fgroup">
+        <label class="flabel">Jumlah Hari</label>
+        <input id="missingDaysCount" type="number" min="1" value="7" class="finput" style="width:100px">
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Filter Cabang</label>
+        <select id="missingCabangFilter" class="fselect" style="min-width:180px;">
+          <option value="">Semua Cabang</option>
+        </select>
+      </div>
+      <div class="fgroup" style="justify-content:flex-end">
+        <label class="flabel">&nbsp;</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-danger" id="btnMissingLastNDays">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Tampilkan yang Belum Mengisi
+          </button>
+          <button class="btn btn-secondary btn-sm" id="btnDownloadMissingLastNDaysExcel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download Excel
+          </button>
+          <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+            <input id="excludeSundays2" type="checkbox" style="accent-color:var(--teal);width:15px;height:15px">
+            <span style="font-size:12px;color:var(--muted)">Kecualikan Minggu</span>
+          </label>
+        </div>
       </div>
     </div>
+    <div class="missing-hint">
+      Menampilkan driver yang tidak submit dalam <code>N</code> hari terakhir.
+      Gunakan dropdown "Filter Cabang" untuk membatasi per cabang.
+    </div>
+  </div>
 
-    <div id="status" class="small" style="margin-top:12px">Memuat...</div>
+  <!-- ═══ MISSING RESULT ═══ -->
+  <div id="missingResults" style="display:none">
+    <h4>Hasil — Driver Belum Mengisi</h4>
+    <div id="missingSummary"></div>
+    <div id="missingContent"></div>
+  </div>
 
-    <!-- TABEL UTAMA -->
-    <div style="overflow:auto; margin-top:12px;">
+  <!-- ═══ STATUS BAR ═══ -->
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="status">Menginisialisasi…</span>
+  </div>
+
+  <!-- ═══ TABLE CARD ═══ -->
+  <div class="table-card">
+    <div class="table-toolbar">
+      <div class="table-toolbar-title">
+        Data Logbook
+        <span class="row-badge" id="rowBadge">0 baris</span>
+      </div>
+      <div id="activeFiltersWrap" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
+    </div>
+    <div class="table-scroll">
       <table id="tbl">
         <thead id="thead"></thead>
-        <tbody id="tbody"></tbody>
+        <tbody id="tbody">
+          <tr><td colspan="20">
+            <div class="empty-state">
+              <div class="empty-icon">📋</div>
+              <p>Memuat data…</p>
+            </div>
+          </td></tr>
+        </tbody>
       </table>
     </div>
 
-    <!-- PAGINATION CONTROLS -->
+    <!-- PAGINATION -->
     <div id="paginationControls" class="pagination" style="display:none">
-      <button id="btnPrevPage">&laquo; Prev</button>
-      <span class="small nowrap">Halaman <input id="inputPage" type="number" min="1" value="1" style="width:70px"> dari <span id="spanTotalPages">1</span></span>
-      <button id="btnNextPage">Next &raquo;</button>
-      <span class="small"> / Menampilkan <span id="spanPageSize">50</span> baris per halaman</span>
+      <div class="page-info">
+        Halaman <strong id="spanCurrPage">1</strong> dari <strong id="spanTotalPages">1</strong>
+        &nbsp;·&nbsp; <span id="spanPageSize">50</span> baris/halaman
+      </div>
+      <div class="page-controls">
+        <button class="btn btn-secondary btn-sm" id="btnPrevPage">← Prev</button>
+        <input type="number" min="1" id="inputPage" class="page-input" value="1">
+        <button class="btn btn-secondary btn-sm" id="btnNextPage">Next →</button>
+      </div>
     </div>
-
-    <!-- PANEL HASIL MISSING -->
-    <div class="panel" id="missingResults" style="display:none;">
-      <h3>Hasil — Driver yang belum mengisi</h3>
-      <div id="missingSummary" class="small"></div>
-      <div id="missingContent" style="margin-top:10px;"></div>
-    </div>
-
   </div>
 
+</div><!-- /app -->
+<div id="toast"></div>
+
+<!-- ═══════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════ -->
 <script>
-/* -------------------------
-   CONFIG: GANTI API_URL & API_KEY
-------------------------- */
-const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec"; // <-- ganti
-const API_KEY = "KEY-2025"; // <-- ganti
+/* ── CONFIG ── */
+const API_URL = "https://script.google.com/macros/s/AKfycbxD3EsjEJ3X5PiEjDwor_YljpqUWUmYObHRKgavtUJ5TOqs4eaITa2XatvSTxtSlbXE/exec";
+const API_KEY = "KEY-2025";
 
-/* -------------------------
-   pagination config
-------------------------- */
+/* ── STATE ── */
+let rawRows     = [];
+let filteredRows = [];
+let driverCabangMap = {};
+let currentKeys = [];
 let currentPage = 1;
-const pageSize = 50; // per 50 baris
-document.getElementById('spanPageSize').textContent = String(pageSize);
+const pageSize  = 50;
 
-/* -------------------------
-   JSONP fallback (GitHub Pages)
-------------------------- */
+/* ── TOAST ── */
+let _toastTimer;
+function toast(msg, type='info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = 'toast'; }, 3200);
+}
+
+/* ── STATUS ── */
+function setStatus(msg, state='idle') {
+  document.getElementById('status').textContent = msg;
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot' + (state === 'loading' ? ' loading' : state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
+}
+
+/* ── JSONP ── */
 function jsonpFetch(url) {
   return new Promise((resolve, reject) => {
-    const cb = "cb_" + Math.random().toString(36).substring(2);
-    window[cb] = (data) => { try { resolve(data); } finally { delete window[cb]; script.remove(); } };
-    const script = document.createElement("script");
-    script.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cb;
-    script.onerror = () => { delete window[cb]; script.remove(); reject(new Error("JSONP load error")); };
+    const cb = 'cb_' + Math.random().toString(36).substring(2);
+    window[cb] = data => { try { resolve(data); } finally { delete window[cb]; script.remove(); } };
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+    script.onerror = () => { delete window[cb]; script.remove(); reject(new Error('JSONP error')); };
     document.head.appendChild(script);
   });
 }
 
-/* -------------------------
-   fetch wrapper (fetch then JSONP)
-------------------------- */
 async function fetchApi(params = {}) {
   params.apiKey = API_KEY;
-  const qs = new URLSearchParams(params).toString();
-  const url = API_URL + "?" + qs;
+  const qs  = new URLSearchParams(params).toString();
+  const url = API_URL + '?' + qs;
   try {
-    const res = await fetch(url, { method: "GET", mode: "cors" });
+    const res = await fetch(url, { method: 'GET', mode: 'cors' });
     if (!res.ok) return await jsonpFetch(url);
     const json = await res.json();
-    if (json && typeof json.success !== "undefined") return json;
+    if (json && typeof json.success !== 'undefined') return json;
     return await jsonpFetch(url);
   } catch (err) {
     try { return await jsonpFetch(url); } catch (e) { throw err; }
   }
 }
 
-/* -------------------------
-   client state
-------------------------- */
-let rawRows = []; // full data from getAll/getByCabang/getByPlat
-let driverCabangMap = {}; // normalizedName -> cabang
-let currentKeys = []; // current table headers (keys order)
-
-/* -------------------------
-   helper: normalize name (used for matching)
-------------------------- */
+/* ── HELPERS ── */
 function normalizeName(s) {
-  if (!s && s !== 0) return "";
-  return String(s).trim().replace(/\s+/g, " ").toLowerCase();
+  if (!s && s !== 0) return '';
+  return String(s).trim().replace(/\s+/g,' ').toLowerCase();
 }
 
-/* -------------------------
-   parse date flexible (client)
-   - supports yyyy-mm-dd, dd/MM/yyyy, dd-MM-yyyy, timestamp, Date()
-   returns Date or null
-------------------------- */
 function parseDateFlexibleClient(str) {
   if (!str) return null;
   str = String(str).trim();
-
-  // yyyy-mm-dd
   let m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
-
-  // dd/MM/yyyy
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
   m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
-
-  // dd-MM-yyyy
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
   m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
-
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  const ts = Date.parse(str);
+  if (!isNaN(ts)) return new Date(ts);
   return null;
 }
 
-
-/* -------------------------
-   format date dd-MM-yyyy
-------------------------- */
-function formatDateDDMMYYYY(d) {
-  if (!(d instanceof Date) || isNaN(d.getTime())) return "";
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const yyyy = d.getFullYear();
-  return dd + "-" + mm + "-" + yyyy;
-}
-
-
-/* -------------------------
-   Format cell value if it's date-like or column is date
-   - key: header name
-   - value: cell value
-------------------------- */
 function formatIfDate(key, value) {
   if (value === null || typeof value === 'undefined') return '';
-
   const k = String(key).toLowerCase();
-
-  // ===== TIMESTAMP (tanggal + jam) =====
   if (k === 'timestamp' || k.includes('waktu')) {
     const d = (value instanceof Date) ? value : new Date(value);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleString('id-ID', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      });
+      return d.toLocaleString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
     }
     return value;
   }
-
-  // ===== JAM (jam saja) =====
   if (k.includes('jam hadir') || k.includes('jam pulang')) {
     const d = (value instanceof Date) ? value : new Date(value);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-    }
+    if (!isNaN(d.getTime())) return d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', hour12:false });
     return value;
   }
-
-  // ===== TANGGAL (tanggal saja) =====
   if (k === 'tanggal' || k.includes('tgl')) {
     const d = (value instanceof Date) ? value : new Date(value);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('id-ID', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
-    }
+    if (!isNaN(d.getTime())) return d.toLocaleDateString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric' });
     return value;
   }
-
-  // ===== DEFAULT =====
   return value;
 }
 
-
-/* -------------------------
-   Build driverCabangMap from rawRows (last known)
-------------------------- */
+/* ── CABANG MAP ── */
 function buildDriverCabangMap(rows) {
   driverCabangMap = {};
   if (!rows || !rows.length) return;
-  // detect keys heuristically using first row
-  const first = rows[0] || {};
-  const keys = Object.keys(first);
+  const keys = Object.keys(rows[0] || {});
   let driverKey = null, cabangKey = null;
   for (const k of keys) {
     const kl = k.toLowerCase();
-    if (!driverKey && (kl.indexOf('driver') !== -1 || kl.indexOf('nama') !== -1 || kl.indexOf('username') !== -1)) driverKey = k;
-    if (!cabangKey && (kl.indexOf('cabang') !== -1 || kl.indexOf('branch') !== -1)) cabangKey = k;
+    if (!driverKey && (kl.includes('driver') || kl.includes('nama') || kl.includes('username'))) driverKey = k;
+    if (!cabangKey && (kl.includes('cabang') || kl.includes('branch'))) cabangKey = k;
   }
-  if (!driverKey) driverKey = 'Driver';
-  if (!cabangKey) cabangKey = 'Cabang';
-  // scan rows, later rows override earlier
-  for (let i=0;i<rows.length;i++){
-    const r = rows[i];
-    const dv = r[driverKey] || r['Driver'] || r['Nama'] || r['username'] || r['Username'];
+  driverKey = driverKey || 'Driver';
+  cabangKey = cabangKey || 'Cabang';
+  for (const r of rows) {
+    const dv  = r[driverKey] || r['Driver'] || r['Nama'] || r['username'] || '';
     const cab = r[cabangKey] || r['Cabang'] || r['cabang'] || '';
     if (!dv && dv !== 0) continue;
     driverCabangMap[normalizeName(dv)] = (cab || '').toString().trim();
   }
 }
 
-/* -------------------------
-   Populate missingCabangFilter dropdown from rawRows unique cabang
-------------------------- */
-function populateMissingCabangDropdown() {
-  const sel = document.getElementById('missingCabangFilter');
-  const curr = sel.value || '';
+/* ── POPULATE DROPDOWNS ── */
+function populateCabangDropdowns() {
   const set = new Set();
   for (const r of rawRows) {
-    // find cabang key
     const keys = Object.keys(r);
     let cabVal = null;
     for (const k of keys) {
-      const kl = k.toLowerCase();
-      if (kl.indexOf('cabang') !== -1 || kl.indexOf('branch') !== -1) { cabVal = r[k]; break; }
+      if (k.toLowerCase().includes('cabang') || k.toLowerCase().includes('branch')) { cabVal = r[k]; break; }
     }
     if (cabVal === null) cabVal = r['Cabang'] || r['cabang'] || '';
     const t = (cabVal || '').toString().trim();
-    if (t !== '') set.add(t);
+    if (t) set.add(t);
   }
-  const arr = Array.from(set).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
-  sel.innerHTML = '';
-  const optAll = document.createElement('option');
-  optAll.value = ''; optAll.textContent = 'Semua cabang';
-  sel.appendChild(optAll);
-  for (const c of arr) {
-    const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o);
-  }
-  if (curr) sel.value = curr;
+  const arr = Array.from(set).sort((a,b) => a.localeCompare(b, undefined, {sensitivity:'base'}));
+
+  // Both dropdowns
+  ['filterCabangDropdown','missingCabangFilter'].forEach(id => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Semua Cabang</option>';
+    arr.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      if (c === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  });
 }
 
-/* -------------------------
-   LOAD ALL (getAll / getByCabang / getByPlat)
-------------------------- */
-async function loadAll() {
-  document.getElementById('status').textContent = 'Memuat...';
-  try {
-    const cab = document.getElementById('filterCabang').value.trim();
-    const plat = document.getElementById('filterPlat').value.trim();
-    let res;
-    if (cab) res = await fetchApi({ action: 'getByCabang', cabang: cab });
-    else if (plat) res = await fetchApi({ action: 'getByPlat', plat: plat });
-    else res = await fetchApi({ action: 'getAll' });
+/* ── STATS ── */
+function updateStats(rows) {
+  const drivers = new Set(rows.map(r => r['Driver'] || r['Nama'] || r['username'] || '').filter(Boolean));
+  const cabset  = new Set();
+  for (const r of rows) {
+    const cab = r['Cabang'] || r['cabang'] || '';
+    if (cab.trim()) cabset.add(cab.trim());
+  }
+  document.getElementById('statTotal').textContent  = rows.length.toLocaleString('id-ID');
+  document.getElementById('statHadir').textContent  = drivers.size.toLocaleString('id-ID');
+  document.getElementById('statMissing').textContent = '—';
+  document.getElementById('statCabang').textContent  = cabset.size.toLocaleString('id-ID');
+}
 
-    rawRows = res.data || [];
-    // set current keys from first row or empty
-    currentKeys = (rawRows.length > 0) ? Object.keys(rawRows[0]) : [];
+/* ── DATE FILTER (client-side) ── */
+function applyDateFilter(rows) {
+  const dari   = document.getElementById('filterTglDari').value;   // yyyy-MM-dd
+  const sampai = document.getElementById('filterTglSampai').value; // yyyy-MM-dd
+  if (!dari && !sampai) return rows;
+
+  return rows.filter(r => {
+    // Find date column
+    let dateVal = null;
+    for (const k of Object.keys(r)) {
+      if (k.toLowerCase() === 'tanggal' || k.toLowerCase().includes('tgl')) { dateVal = r[k]; break; }
+    }
+    if (!dateVal && r['Tanggal']) dateVal = r['Tanggal'];
+    const d = (dateVal instanceof Date) ? dateVal : parseDateFlexibleClient(dateVal);
+    if (!d || isNaN(d.getTime())) return true; // kalau tidak ada tanggal, tampilkan
+
+    const ts = d.getTime();
+    if (dari) {
+      const [yy,mm,dd] = dari.split('-').map(Number);
+      if (ts < new Date(yy, mm-1, dd).getTime()) return false;
+    }
+    if (sampai) {
+      const [yy,mm,dd] = sampai.split('-').map(Number);
+      if (ts > new Date(yy, mm-1, dd, 23, 59, 59).getTime()) return false;
+    }
+    return true;
+  });
+}
+
+/* ── RENDER ACTIVE FILTER CHIPS ── */
+function renderActiveFilterChips() {
+  const wrap = document.getElementById('activeFiltersWrap');
+  const chips = [];
+  const cab   = document.getElementById('filterCabangDropdown').value;
+  const plat  = document.getElementById('filterPlat').value.trim();
+  const dari  = document.getElementById('filterTglDari').value;
+  const smpai = document.getElementById('filterTglSampai').value;
+  if (cab)  chips.push(`🏢 ${cab}`);
+  if (plat) chips.push(`🚗 ${plat}`);
+  if (dari) chips.push(`📅 Dari: ${dari}`);
+  if (smpai) chips.push(`📅 s/d: ${smpai}`);
+  wrap.innerHTML = chips.map(c => `
+    <span style="display:inline-flex;align-items:center;gap:4px;background:var(--teal-lt);
+      color:var(--teal);border:1px solid #99f6e4;border-radius:20px;
+      padding:3px 10px;font-size:11px;font-weight:600">${c}</span>
+  `).join('');
+}
+
+/* ── LOAD ALL ── */
+async function loadAll() {
+  setStatus('Memuat data…', 'loading');
+  try {
+    const cab  = document.getElementById('filterCabangDropdown').value.trim();
+    const plat = document.getElementById('filterPlat').value.trim();
+
+    let res;
+    if (cab)  res = await fetchApi({ action: 'getByCabang', cabang: cab });
+    else if (plat) res = await fetchApi({ action: 'getByPlat', plat });
+    else      res = await fetchApi({ action: 'getAll' });
+
+    rawRows    = res.data || [];
+    currentKeys = rawRows.length > 0 ? Object.keys(rawRows[0]) : [];
     buildDriverCabangMap(rawRows);
-    populateMissingCabangDropdown();
-    currentPage = 1;
-    renderRawTablePaged(); // paginated render
-    document.getElementById('status').textContent = 'Selesai. ' + rawRows.length + ' baris (sumber).';
+    populateCabangDropdowns();
+    applyFiltersAndRender();
+    setStatus(`✓ ${rawRows.length} data dimuat`, 'ok');
+    toast(`${rawRows.length} baris berhasil dimuat`, 'ok');
   } catch (err) {
-    document.getElementById('status').textContent = 'Error: ' + (err.message || err);
+    setStatus('Gagal memuat: ' + (err.message || err), 'err');
+    toast('Error: ' + (err.message || err), 'err');
     console.error(err);
   }
 }
 
-/* -------------------------
-   Render raw table with pagination
-------------------------- */
+/* ── APPLY FILTERS & RENDER ── */
+function applyFiltersAndRender() {
+  filteredRows = applyDateFilter(rawRows);
+  updateStats(filteredRows);
+  renderActiveFilterChips();
+  currentPage = 1;
+  renderRawTablePaged();
+  document.getElementById('rowBadge').textContent = filteredRows.length + ' baris';
+}
+
+/* ── RENDER TABLE ── */
 function renderRawTablePaged() {
   const thead = document.getElementById('thead');
   const tbody = document.getElementById('tbody');
   thead.innerHTML = ''; tbody.innerHTML = '';
 
-  if (!rawRows || rawRows.length === 0) {
-    thead.innerHTML = '<tr><th>Tidak ada data</th></tr>';
+  const data = filteredRows.length ? filteredRows : rawRows;
+
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="20">
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <p>Tidak ada data ditemukan</p>
+        <small>Coba ubah filter atau refresh data</small>
+      </div></td></tr>`;
     document.getElementById('paginationControls').style.display = 'none';
     return;
   }
 
-  // ensure currentKeys set
-  if (!currentKeys || currentKeys.length === 0) currentKeys = Object.keys(rawRows[0]);
+  const keys = currentKeys.length ? currentKeys : Object.keys(data[0]);
 
-  // header
+  // Header
   const trh = document.createElement('tr');
-  currentKeys.forEach(k => {
+  keys.forEach(k => {
     const th = document.createElement('th');
     th.textContent = k;
     trh.appendChild(th);
   });
   thead.appendChild(trh);
 
-  // pagination math
-  const total = rawRows.length;
+  // Pagination math
+  const total = data.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (currentPage < 1) currentPage = 1;
   if (currentPage > totalPages) currentPage = totalPages;
 
   const start = (currentPage - 1) * pageSize;
-  const slice = rawRows.slice(start, start + pageSize);
+  const slice = data.slice(start, start + pageSize);
 
-  // rows
+  // Rows
   for (const r of slice) {
     const tr = document.createElement('tr');
-    for (const k of currentKeys) {
+    for (const k of keys) {
       const td = document.createElement('td');
       let v = r[k];
-      // format date cells if appropriate
       v = formatIfDate(k, v);
       if (typeof v === 'string' && v.startsWith('<span')) {
-  td.innerHTML = v;
-} else {
-  td.textContent = (v === null || typeof v === 'undefined') ? '' : v;
-}
+        td.innerHTML = v;
+      } else {
+        const ks = k.toLowerCase();
+        if (ks.includes('driver') || ks.includes('nama')) td.className = 'cell-primary';
+        else if (ks.includes('plat') || ks.includes('kode')) td.className = 'cell-mono';
+        td.textContent = (v === null || typeof v === 'undefined') ? '' : v;
+      }
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
   }
 
-  // pagination controls
-  document.getElementById('paginationControls').style.display = (totalPages > 1 ? 'flex' : 'none');
+  // Pagination controls
+  const showPag = totalPages > 1;
+  document.getElementById('paginationControls').style.display = showPag ? 'flex' : 'none';
   document.getElementById('spanTotalPages').textContent = String(totalPages);
-  document.getElementById('inputPage').value = String(currentPage);
-
-  // attach prev/next disabled state
+  document.getElementById('spanCurrPage').textContent  = String(currentPage);
+  document.getElementById('inputPage').value           = String(currentPage);
   document.getElementById('btnPrevPage').disabled = (currentPage <= 1);
   document.getElementById('btnNextPage').disabled = (currentPage >= totalPages);
+  document.getElementById('spanPageSize').textContent  = String(pageSize);
 }
 
-/* -------------------------
-   Pagination event handlers
-------------------------- */
-document.getElementById('btnPrevPage').addEventListener('click', () => {
-  currentPage = Math.max(1, currentPage - 1);
-  renderRawTablePaged();
-});
-document.getElementById('btnNextPage').addEventListener('click', () => {
-  const totalPages = Math.max(1, Math.ceil((rawRows.length || 0) / pageSize));
-  currentPage = Math.min(totalPages, currentPage + 1);
-  renderRawTablePaged();
-});
-document.getElementById('inputPage').addEventListener('change', (e) => {
-  let v = Number(e.target.value) || 1;
-  const totalPages = Math.max(1, Math.ceil((rawRows.length || 0) / pageSize));
-  if (v < 1) v = 1;
-  if (v > totalPages) v = totalPages;
-  currentPage = v;
-  renderRawTablePaged();
-});
-
-/* -------------------------
-   MissingLastNDays functions (same as before) but apply cabang filter on client
-------------------------- */
+/* ── MISSING LOGIC ── */
 async function fetchMissingLastNDays(n) {
   return await fetchApi({
-    action: 'missingLastNDays',
-    n: String(n),
+    action: 'missingLastNDays', n: String(n),
     excludeSundays: document.getElementById('excludeSundays2').checked ? 'true' : 'false'
   });
 }
 
 function driverMatchesCabang(driverName, selCabang) {
-  if (!selCabang || selCabang.toString().trim() === '') return true;
-  const key = normalizeName(driverName);
-  const cabKnown = driverCabangMap[key] || '';
-  return cabKnown.toString().trim().toLowerCase() === selCabang.toString().trim().toLowerCase();
+  if (!selCabang || !selCabang.trim()) return true;
+  const cab = driverCabangMap[normalizeName(driverName)] || '';
+  return cab.trim().toLowerCase() === selCabang.trim().toLowerCase();
 }
 
 function showMissingLastNDays(n, resultObj) {
   document.getElementById('missingResults').style.display = 'block';
   const missingAll = resultObj.missingAll || [];
-  const per = resultObj.perDriverMissingDays || {};
-  const selCabang = document.getElementById('missingCabangFilter').value || '';
-
-  const missingFiltered = missingAll.filter(name => driverMatchesCabang(name, selCabang));
+  const per        = resultObj.perDriverMissingDays || {};
+  const selCabang  = document.getElementById('missingCabangFilter').value || '';
+  const filtered   = missingAll.filter(name => driverMatchesCabang(name, selCabang));
 
   document.getElementById('missingSummary').textContent =
-    "Periode: last " + n + " hari — Driver tidak submit (filter cabang: " + (selCabang || "Semua") + "): " + missingFiltered.length;
+    `Periode: ${n} hari terakhir — Tidak submit: ${filtered.length} driver` +
+    (selCabang ? ` | Cabang: ${selCabang}` : '');
 
   const content = document.getElementById('missingContent');
   content.innerHTML = '';
 
-  const block1 = document.createElement('div');
-  block1.innerHTML = "<strong>Driver tidak submit sama sekali:</strong>";
-  if (missingFiltered.length === 0) {
-    block1.innerHTML += " <span class='small'>Tidak ada</span>";
-  } else {
+  if (filtered.length > 0) {
     const ul = document.createElement('ul');
-    missingFiltered.forEach(d => {
+    filtered.forEach(d => {
       const li = document.createElement('li');
       const cab = driverCabangMap[normalizeName(d)] || '';
-      li.textContent = cab ? (d + " — " + cab) : d;
+      li.innerHTML = `<strong>${d}</strong>${cab ? ` <span style="color:var(--muted);font-size:12px">— ${cab}</span>` : ''}`;
       ul.appendChild(li);
     });
-    block1.appendChild(ul);
-  }
-  content.appendChild(block1);
-
-  const table = document.createElement('table');
-  table.style.marginTop = '12px';
-  const header = document.createElement('tr');
-  header.innerHTML = "<th>Driver</th><th>Missing Days</th><th>Total</th>";
-  table.appendChild(header);
-
-  const drivers = Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
-  for (const drv of drivers) {
-    if (!driverMatchesCabang(drv, selCabang)) continue;
-    const days = per[drv];
-    const tr = document.createElement('tr');
-    const cab = driverCabangMap[normalizeName(drv)] || '';
-    const displayName = cab ? (drv + " — " + cab) : drv;
-    tr.innerHTML = "<td>" + displayName + "</td><td>" + days.join(", ") + "</td><td>" + days.length + "</td>";
-    table.appendChild(tr);
-  }
-  content.appendChild(table);
-}
-
-/* -------------------------
-   Write missing to table (client) - replaces main table and resets pagination
-------------------------- */
-function writeMissingLastNDaysToTable(n, resultObj) {
-  const per = resultObj.perDriverMissingDays || {};
-  const selCabang = document.getElementById('missingCabangFilter').value || '';
-
-  const rows = [];
-  const keys = ['Driver', 'Missing Days', 'Total Missing'];
-
-  for (const drv of Object.keys(per).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: 'base' })
-  )) {
-    if (!driverMatchesCabang(drv, selCabang)) continue;
-
-    const total = per[drv].length;
-    const cab = driverCabangMap[normalizeName(drv)] || '';
-    const driverName = cab ? `${drv} — ${cab}` : drv;
-
-    rows.push({
-      'Driver': driverName,
-      'Missing Days': per[drv].join(', '),
-      'Total Missing': total > 4
-        ? `<span class="badge badge-danger">${total}</span>`
-        : `<span class="badge badge-muted">${total}</span>`
-    });
+    content.appendChild(ul);
+  } else {
+    content.innerHTML = `<p style="color:var(--green);font-size:13px;margin-top:8px">✅ Semua driver sudah mengisi.</p>`;
   }
 
-  rawRows = rows;
-  currentKeys = keys;
-  currentPage = 1;
-  renderRawTablePaged(true); // ← penting
-}
-
-
-/* -------------------------
-   CSV download (apply cabang filter)
-------------------------- */
-function downloadMissingLastNDaysCSV(n, resultObj) {
-  const per = resultObj.perDriverMissingDays || {};
-  const selCabang = document.getElementById('missingCabangFilter').value || '';
-  const rows = [['Driver','Cabang','TotalMissing','MissingDays']];
-  const drivers = Object.keys(per).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
-  for (const drv of drivers) {
-    if (!driverMatchesCabang(drv, selCabang)) continue;
-    const days = per[drv];
-    const cab = driverCabangMap[normalizeName(drv)] || '';
-    rows.push([drv, cab, String(days.length), days.join('; ')]);
-  }
-  downloadCSV('missing_last_' + n + '_days_filtered.csv', rows);
-}
-  
-  function downloadMissingLastNDaysExcel(n, resultObj) {
-  const per = resultObj.perDriverMissingDays || {};
-  const selCabang = document.getElementById('missingCabangFilter').value || '';
-
-  const data = [];
-  data.push(['Driver', 'Cabang', 'Total Missing', 'Missing Days']);
-
-  const drivers = Object.keys(per).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: 'base' })
-  );
-
-  for (const drv of drivers) {
-    if (!driverMatchesCabang(drv, selCabang)) continue;
-
-    const days = per[drv];
-    const cab = driverCabangMap[normalizeName(drv)] || '';
-
-    data.push([
-      drv,
-      cab,
-      days.length,
-      days.join('; ')
-    ]);
-  }
-
-  const worksheet = XLSX.utils.aoa_to_sheet(data);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Missing Driver');
-
-  XLSX.writeFile(
-    workbook,
-    `missing_last_${n}_days_filtered.xlsx`
-  );
-}
-
-/* -------------------------
-   CSV util
-------------------------- */
-function downloadCSV(filename, rows) {
-  const csv = rows.map(r => r.map(v => {
-    if (v == null) return '';
-    v = String(v);
-    if (v.includes(',') || v.includes('"') || v.includes('\n')) return '"' + v.replace(/"/g,'""') + '"';
-    return v;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
-}
-
-function exportLogbookToExcel() {
-  if (!rawRows || rawRows.length === 0) {
-    alert('Tidak ada data logbook untuk diexport');
-    return;
-  }
-
-  const data = [];
-  data.push(currentKeys); // header
-
-  for (const row of rawRows) {
-    const line = [];
-    for (const key of currentKeys) {
-      let val = row[key];
-      val = formatIfDate(key, val);
-      line.push(val ?? '');
+  // Detail table
+  const drivers = Object.keys(per).sort((a,b) => a.localeCompare(b,undefined,{sensitivity:'base'}));
+  const hasDtl  = drivers.some(d => driverMatchesCabang(d, selCabang));
+  if (hasDtl) {
+    const tbl = document.createElement('table');
+    tbl.style.marginTop = '14px';
+    tbl.innerHTML = '<thead><tr><th>Driver</th><th>Cabang</th><th>Tanggal Kosong</th><th>Total</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    for (const drv of drivers) {
+      if (!driverMatchesCabang(drv, selCabang)) continue;
+      const days = per[drv];
+      const cab  = driverCabangMap[normalizeName(drv)] || '—';
+      const tr   = document.createElement('tr');
+      const cls  = days.length > 4 ? 'badge badge-danger' : 'badge badge-muted';
+      tr.innerHTML = `
+        <td class="cell-primary">${drv}</td>
+        <td><span class="badge badge-yellow">${cab}</span></td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted-soft)">${days.join(', ')}</td>
+        <td><span class="${cls}">${days.length}</span></td>`;
+      tb.appendChild(tr);
     }
-    data.push(line);
+    tbl.appendChild(tb);
+    content.appendChild(tbl);
   }
+}
 
+function downloadMissingLastNDaysExcel(n, resultObj) {
+  const per = resultObj.perDriverMissingDays || {};
+  const selCabang = document.getElementById('missingCabangFilter').value || '';
+  const data = [['Driver','Cabang','Total Missing','Missing Days']];
+  const drivers = Object.keys(per).sort((a,b) => a.localeCompare(b,undefined,{sensitivity:'base'}));
+  for (const drv of drivers) {
+    if (!driverMatchesCabang(drv, selCabang)) continue;
+    const days = per[drv];
+    const cab  = driverCabangMap[normalizeName(drv)] || '';
+    data.push([drv, cab, days.length, days.join('; ')]);
+  }
   const ws = XLSX.utils.aoa_to_sheet(data);
   const wb = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Logbook');
-
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-
-  XLSX.writeFile(
-    wb,
-    `logbook_${yyyy}-${mm}-${dd}.xlsx`
-  );
+  XLSX.utils.book_append_sheet(wb, ws, 'Missing Driver');
+  XLSX.writeFile(wb, `missing_last_${n}_days.xlsx`);
+  toast(`Missing data diekspor (${data.length-1} driver)`, 'ok');
 }
-/* -------------------------
-   Events
-------------------------- */
-document.getElementById('btnRefresh').addEventListener('click', loadAll);
-document.getElementById('filterCabang').addEventListener('keyup', (e)=>{ if (e.key === 'Enter') loadAll(); });
-document.getElementById('filterPlat').addEventListener('keyup', (e)=>{ if (e.key === 'Enter') loadAll(); });
 
-document.getElementById('btnMissingLastNDays').addEventListener('click', async ()=>{
+/* ── EXPORT LOGBOOK ── */
+function exportLogbookToExcel() {
+  const data = filteredRows.length ? filteredRows : rawRows;
+  if (!data || data.length === 0) { toast('Tidak ada data untuk diexport', 'err'); return; }
+  const keys = currentKeys.length ? currentKeys : Object.keys(data[0]);
+  const sheet = [keys];
+  for (const row of data) {
+    const line = [];
+    for (const k of keys) {
+      let v = row[k];
+      v = formatIfDate(k, v);
+      line.push(v ?? '');
+    }
+    sheet.push(line);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(sheet);
+  ws['!cols'] = keys.map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Logbook');
+  const today = new Date();
+  const fn = `logbook_${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}.xlsx`;
+  XLSX.writeFile(wb, fn);
+  toast(`${data.length} baris berhasil diekspor`, 'ok');
+}
+
+/* ── RESET FILTER ── */
+function resetFilter() {
+  document.getElementById('filterCabangDropdown').value = '';
+  document.getElementById('filterPlat').value = '';
+  document.getElementById('filterTglDari').value = '';
+  document.getElementById('filterTglSampai').value = '';
+  loadAll();
+}
+
+/* ── EVENTS ── */
+document.getElementById('btnRefresh').addEventListener('click', loadAll);
+document.getElementById('btnApplyFilter').addEventListener('click', () => {
+  const plat = document.getElementById('filterPlat').value.trim();
+  const cab  = document.getElementById('filterCabangDropdown').value.trim();
+  // If cabang or plat changed, fetch from API; then apply date filter client-side
+  if (cab || plat) {
+    loadAll(); // will re-fetch then apply date filter via applyFiltersAndRender
+  } else {
+    applyFiltersAndRender();
+  }
+});
+document.getElementById('btnResetFilter').addEventListener('click', resetFilter);
+document.getElementById('filterPlat').addEventListener('keyup', e => { if (e.key === 'Enter') loadAll(); });
+document.getElementById('btnExportLogbookExcel').addEventListener('click', exportLogbookToExcel);
+
+// Missing
+document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
   try {
     const n = Number(document.getElementById('missingDaysCount').value) || 7;
+    setStatus('Mengecek driver yang belum mengisi…', 'loading');
     const res = await fetchMissingLastNDays(n);
     showMissingLastNDays(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
+    setStatus('Selesai', 'ok');
+  } catch(err) { setStatus('Error: '+err.message,'err'); toast('Error: '+err.message,'err'); }
 });
 
-document.getElementById('btnMissingLastNDaysTable').addEventListener('click', async ()=>{
+document.getElementById('btnDownloadMissingLastNDaysExcel').addEventListener('click', async () => {
   try {
     const n = Number(document.getElementById('missingDaysCount').value) || 7;
     const res = await fetchMissingLastNDays(n);
-    writeMissingLastNDaysToTable(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
+    downloadMissingLastNDaysExcel(n, res.result || { perDriverMissingDays: {} });
+  } catch(err) { toast('Error: '+err.message,'err'); }
 });
 
-document.getElementById('btnDownloadMissingLastNDaysCSV').addEventListener('click', async ()=>{
-  try {
-    const n = Number(document.getElementById('missingDaysCount').value) || 7;
-    const res = await fetchMissingLastNDays(n);
-    downloadMissingLastNDaysCSV(n, res.result || { missingAll: [], perDriverMissingDays: {} });
-  } catch (err) {
-    alert('Error: ' + (err.message || err));
-    console.error(err);
-  }
+// Pagination
+document.getElementById('btnPrevPage').addEventListener('click', () => {
+  currentPage = Math.max(1, currentPage - 1); renderRawTablePaged();
 });
-  document.getElementById('btnDownloadMissingLastNDaysExcel')
-  .addEventListener('click', async () => {
-    try {
-      const n = Number(
-        document.getElementById('missingDaysCount').value
-      ) || 7;
+document.getElementById('btnNextPage').addEventListener('click', () => {
+  const data = filteredRows.length ? filteredRows : rawRows;
+  const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+  currentPage = Math.min(totalPages, currentPage + 1); renderRawTablePaged();
+});
+document.getElementById('inputPage').addEventListener('change', e => {
+  const data = filteredRows.length ? filteredRows : rawRows;
+  const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+  let v = Number(e.target.value) || 1;
+  if (v < 1) v = 1; if (v > totalPages) v = totalPages;
+  currentPage = v; renderRawTablePaged();
+});
 
-      const res = await fetchMissingLastNDays(n);
-      downloadMissingLastNDaysExcel(
-        n,
-        res.result || { perDriverMissingDays: {} }
-      );
-    } catch (err) {
-      alert('Error: ' + (err.message || err));
-      console.error(err);
-    }
-  });
-document.getElementById('btnExportLogbookExcel')
-  .addEventListener('click', exportLogbookToExcel);
-/* -------------------------
-   initial load
-------------------------- */
+/* ── INIT ── */
 loadAll();
-
 </script>
 </body>
 </html>
