@@ -941,12 +941,36 @@ function normalizeName(s) {
 function parseDateFlexibleClient(str) {
   if (!str) return null;
   str = String(str).trim();
+
+  // gviz native date: "Date(2026,0,26)" or "Date(2026,0,26,10,30,0)"
+  // month is 0-indexed in gviz format!
+  let gd = str.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/i);
+  if (gd) {
+    return new Date(+gd[1], +gd[2], +gd[3], +(gd[4]||0), +(gd[5]||0), +(gd[6]||0));
+  }
+
+  // ISO: yyyy-mm-dd
   let m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+
+  // N/N/YYYY — detect US (M/D) vs ID (D/M)
+  // gviz default locale is US → "1/26/2026" = January 26
   m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  if (m) {
+    const a = +m[1], b = +m[2], yr = +m[3];
+    if (b > 12) return new Date(yr, a-1, b); // b must be day → US M/D/YYYY
+    if (a > 12) return new Date(yr, b-1, a); // a must be day → ID D/M/YYYY
+    return new Date(yr, a-1, b);              // ambiguous → assume US (gviz default)
+  }
+
   m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  if (m) {
+    const a = +m[1], b = +m[2], yr = +m[3];
+    if (b > 12) return new Date(yr, a-1, b);
+    if (a > 12) return new Date(yr, b-1, a);
+    return new Date(yr, b-1, a); // dash format: assume ID D-M-YYYY
+  }
+
   const ts = Date.parse(str);
   if (!isNaN(ts)) return new Date(ts);
   return null;
@@ -1465,16 +1489,24 @@ async function loadArchiveSheet(sheetName) {
   archivePage = 1;
 
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${ARCHIVE_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
+    const url = `https://docs.google.com/spreadsheets/d/${ARCHIVE_SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
     const res  = await fetch(url);
     const text = await res.text();
-    const json = JSON.parse(text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);?\s*$/)[1]);
-    if (json.status !== 'ok') throw new Error(json.errors?.[0]?.message || 'Sheet error');
+    // Robust extraction: avoid non-greedy regex truncation on ");" inside JSON strings
+    const _si = text.indexOf('(');
+    const _ei = text.lastIndexOf(')');
+    if (_si === -1 || _ei === -1) throw new Error('Response format tidak dikenal');
+    const json = JSON.parse(text.substring(_si + 1, _ei));
+    if (json.status !== 'ok') throw new Error(json.errors?.[0]?.message || 'Sheet error — pastikan nama tab sheet benar dan dibagikan sebagai Viewer');
 
     archiveRawRows = parseArchiveGviz(json.table);
     archiveKeys    = archiveRawRows.length ? Object.keys(archiveRawRows[0]) : [];
 
     populateArchiveCabangDropdown();
+    // Reset all filters → show complete data of selected sheet by default
+    document.getElementById('archiveTglDari').value   = '';
+    document.getElementById('archiveTglSampai').value = '';
+    document.getElementById('archiveCabang').value    = '';
     applyArchiveFilter();
     setArchiveStatus(`✓ ${archiveRawRows.length} baris dimuat dari ${currentArchiveSheet.label}`, 'ok');
     toast(`Arsip ${currentArchiveSheet.label}: ${archiveRawRows.length} baris`, 'ok');
@@ -1495,17 +1527,57 @@ async function loadArchiveSheet(sheetName) {
 
 /* ── Parse gviz for archive ── */
 function parseArchiveGviz(table) {
-  const cols = table.cols.map(c => c.label.trim());
+  // cols carries both label and gviz type for smart conversion
+  const cols = table.cols.map(c => ({ label: (c.label || '').trim(), type: c.type || '' }));
   const rows = [];
+
   for (const row of (table.rows || [])) {
     const r = {};
+
     cols.forEach((col, i) => {
-      const cell = row.c[i];
-      r[col] = (cell && cell.v !== null && cell.v !== undefined)
-        ? (cell.f !== undefined && cell.f !== null ? cell.f.toString().trim() : cell.v.toString().trim())
-        : '';
+      const cell = row.c && row.c[i];
+      if (!cell || cell.v === null || cell.v === undefined) {
+        r[col.label] = ''; return;
+      }
+
+      // Prefer formatted value — gviz already rendered it as human-readable
+      if (cell.f !== undefined && cell.f !== null && cell.f !== '') {
+        r[col.label] = cell.f.toString().trim(); return;
+      }
+
+      const rawStr = cell.v.toString().trim();
+
+      // gviz date/datetime: "Date(2026,0,26)" or "Date(2026,0,26,10,30,0)"
+      const gd = rawStr.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/i);
+      if (gd) {
+        const d = new Date(+gd[1], +gd[2], +gd[3], +(gd[4]||0), +(gd[5]||0), +(gd[6]||0));
+        if (gd[4] !== undefined) {
+          r[col.label] = d.toLocaleString('id-ID', {
+            day:'2-digit', month:'2-digit', year:'numeric',
+            hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
+          });
+        } else {
+          r[col.label] = d.toLocaleDateString('id-ID', {
+            day:'2-digit', month:'2-digit', year:'numeric'
+          });
+        }
+        return;
+      }
+
+      // gviz timeofday: fraction 0..1 (e.g. 0.4375 = 10:30)
+      if (col.type === 'timeofday' || (typeof cell.v === 'number' && cell.v >= 0 && cell.v < 1)) {
+        const totalMin = Math.round(cell.v * 24 * 60);
+        const h = Math.floor(totalMin / 60), mn = totalMin % 60;
+        r[col.label] = String(h).padStart(2,'0') + ':' + String(mn).padStart(2,'0');
+        return;
+      }
+
+      r[col.label] = rawStr;
     });
-    if (cols.every(k => !r[k])) continue; // skip fully empty
+
+    // Skip ONLY truly empty rows (all empty strings — NOT zeros)
+    const labels = cols.map(c => c.label);
+    if (labels.length > 0 && labels.every(k => r[k] === '')) continue;
     rows.push(r);
   }
   return rows;
