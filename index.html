@@ -445,6 +445,135 @@ tbody tr:hover td { background: rgba(13,148,136,.03); }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .header-title { font-size: 18px; }
 }
+
+/* ═══════════════════════════════════════
+   TAB NAVIGATION
+═══════════════════════════════════════ */
+.tab-nav {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 6px;
+  box-shadow: var(--shadow-sm); margin-bottom: 18px;
+  width: fit-content;
+}
+.tab-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 20px; border-radius: 9px;
+  border: none; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px; font-weight: 600;
+  transition: all .2s; white-space: nowrap;
+  background: transparent; color: var(--muted);
+}
+.tab-btn:hover { background: var(--surface2); color: var(--text); }
+.tab-btn.active {
+  background: var(--teal); color: #fff;
+  box-shadow: 0 2px 8px rgba(13,148,136,.3);
+}
+.tab-btn .tab-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+}
+.tab-btn.active .tab-dot { background: rgba(255,255,255,.6); }
+.tab-btn:not(.active) .tab-dot { background: var(--green); }
+.tab-badge {
+  background: rgba(255,255,255,.25); border-radius: 20px;
+  padding: 1px 8px; font-size: 10px; font-weight: 700;
+}
+.tab-btn:not(.active) .tab-badge {
+  background: var(--surface2); color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* Tab panel visibility */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ═══════════════════════════════════════
+   ARCHIVE PANEL
+═══════════════════════════════════════ */
+.archive-picker {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px 22px;
+  box-shadow: var(--shadow-sm); margin-bottom: 18px;
+}
+.archive-picker-title {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--muted); margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.archive-picker-title::before {
+  content: ''; display: block; width: 4px; height: 14px;
+  background: #8b5cf6; border-radius: 2px;
+}
+.archive-grid {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.archive-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  border: 1.5px solid var(--border); background: var(--surface2);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 600; color: var(--text-soft);
+  transition: all .15s; white-space: nowrap;
+}
+.archive-chip:hover { border-color: #8b5cf6; color: #8b5cf6; background: #f5f3ff; }
+.archive-chip.selected {
+  background: #8b5cf6; border-color: #8b5cf6; color: #fff;
+  box-shadow: 0 2px 8px rgba(139,92,246,.3);
+}
+.archive-chip .chip-year { opacity: .7; font-size: 10px; margin-left: 2px; }
+
+/* Archive status banner */
+.archive-banner {
+  background: #f5f3ff; border: 1px solid #ddd6fe;
+  border-radius: 9px; padding: 10px 16px; margin-bottom: 14px;
+  font-size: 12px; color: #6d28d9;
+  display: flex; align-items: center; gap: 10px;
+}
+.archive-banner strong { font-weight: 700; }
+
+/* Archive filter row */
+.archive-filter-row {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 16px 20px;
+  box-shadow: var(--shadow-sm); margin-bottom: 14px;
+}
+
+/* Purple accent for archive context */
+.btn-purple {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: #8b5cf6; color: #fff;
+  border: none; border-radius: var(--radius); cursor: pointer;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px; font-weight: 600; padding: 9px 16px;
+  transition: all .15s; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(139,92,246,.25);
+}
+.btn-purple:hover { background: #7c3aed; }
+.btn-purple:active { transform: scale(.97); }
+
+.inspeksi-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--teal-lt); color: var(--teal);
+  border: 1px solid #99f6e4; border-radius: 20px;
+  padding: 3px 10px; font-size: 11px; font-weight: 600;
+}
+.inspeksi-badge::before {
+  content: ''; width: 6px; height: 6px;
+  background: var(--green); border-radius: 50%;
+  display: inline-block; animation: pulse 2s infinite;
+}
+
+.archive-table-card {
+  background: var(--surface); border: 1px solid #ddd6fe;
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.archive-table-card .table-toolbar {
+  border-bottom-color: #ede9fe;
+  background: #faf5ff;
+}
+
 </style>
 </head>
 <body>
@@ -498,6 +627,22 @@ tbody tr:hover td { background: rgba(13,148,136,.03); }
     </div>
   </div>
 
+  <!-- ═══ TAB NAVIGATION ═══ -->
+  <div class="tab-nav">
+    <button class="tab-btn active" id="tabBtnInspeksi" onclick="switchTab('inspeksi')">
+      <span class="tab-dot"></span>
+      Inspeksi Aktif
+      <span class="tab-badge" id="tabBadgeInspeksi">—</span>
+    </button>
+    <button class="tab-btn" id="tabBtnArsip" onclick="switchTab('arsip')">
+      🗄️
+      Data Arsip
+      <span class="tab-badge" id="tabBadgeArsip">—</span>
+    </button>
+  </div>
+
+  <!-- ════════ TAB: INSPEKSI AKTIF ════════ -->
+  <div class="tab-panel active" id="panel-inspeksi">
   <!-- ═══ FILTER CARD ═══ -->
   <div class="filter-card">
     <div class="filter-card-title">Filter Data</div>
@@ -629,6 +774,102 @@ tbody tr:hover td { background: rgba(13,148,136,.03); }
     </div>
   </div>
 
+
+  </div><!-- /panel-inspeksi -->
+
+  <!-- ════════ TAB: ARSIP ════════ -->
+  <div class="tab-panel" id="panel-arsip">
+
+    <!-- Archive sheet picker -->
+    <div class="archive-picker">
+      <div class="archive-picker-title">Pilih Periode Arsip</div>
+      <div class="archive-grid" id="archiveChips">
+        <!-- Injected by JS based on available sheets -->
+        <span style="color:var(--muted);font-size:13px">Memuat daftar arsip…</span>
+      </div>
+    </div>
+
+    <!-- Archive filter row -->
+    <div class="archive-filter-row" id="archiveFilterRow" style="display:none">
+      <div class="fgroup">
+        <label class="flabel">Cabang</label>
+        <select id="archiveCabang" class="fselect" style="min-width:180px">
+          <option value="">Semua Cabang</option>
+        </select>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Tanggal Dari</label>
+        <input type="date" id="archiveTglDari" class="finput">
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Tanggal Sampai</label>
+        <input type="date" id="archiveTglSampai" class="finput">
+      </div>
+      <div class="fgroup" style="gap:6px">
+        <label class="flabel">&nbsp;</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="applyArchiveFilter()">Terapkan</button>
+          <button class="btn btn-secondary" onclick="resetArchiveFilter()">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Archive active banner -->
+    <div class="archive-banner" id="archiveBanner" style="display:none">
+      🗄️ Menampilkan data arsip: <strong id="archiveBannerLabel">—</strong>
+      &nbsp;·&nbsp; <span id="archiveBannerCount">0</span> baris
+    </div>
+
+    <!-- Archive status bar -->
+    <div class="status-bar" id="archiveStatusBar" style="display:none">
+      <div class="status-dot" id="archiveStatusDot"></div>
+      <span id="archiveStatus">Pilih periode arsip di atas</span>
+    </div>
+
+    <!-- Archive table card -->
+    <div class="archive-table-card" id="archiveTableCard" style="display:none">
+      <div class="table-toolbar">
+        <div class="table-toolbar-title">
+          🗄️ &nbsp;Data Arsip
+          <span class="row-badge" id="archiveRowBadge">0 baris</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="archiveActiveFiltersWrap" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
+          <button class="btn-purple btn-sm btn" onclick="exportArchiveExcel()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Excel
+          </button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead id="archiveThead"></thead>
+          <tbody id="archiveTbody">
+            <tr><td colspan="20">
+              <div class="empty-state">
+                <div class="empty-icon">🗄️</div>
+                <p>Pilih periode arsip</p>
+                <small>Klik salah satu chip bulan/tahun di atas</small>
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Archive Pagination -->
+      <div id="archivePagination" class="pagination" style="display:none">
+        <div class="page-info">
+          Hal <strong id="archiveCurrPage">1</strong> / <strong id="archiveTotalPages">1</strong>
+          &nbsp;·&nbsp; <span id="archivePageSize">50</span> baris/hal
+        </div>
+        <div class="page-controls">
+          <button class="btn btn-secondary btn-sm" id="archivePrevPage">← Prev</button>
+          <input type="number" min="1" id="archiveInputPage" class="page-input" value="1">
+          <button class="btn btn-secondary btn-sm" id="archiveNextPage">Next →</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panel-arsip -->
 </div><!-- /app -->
 <div id="toast"></div>
 
@@ -1123,8 +1364,354 @@ document.getElementById('inputPage').addEventListener('change', e => {
   currentPage = v; renderRawTablePaged();
 });
 
+
+/* ════════════════════════════════════════════════
+   TAB SYSTEM
+════════════════════════════════════════════════ */
+let activeTab = 'inspeksi';
+
+function switchTab(tab) {
+  activeTab = tab;
+  ['inspeksi','arsip'].forEach(t => {
+    document.getElementById('panel-' + t).classList.toggle('active', t === tab);
+    document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1))
+            .classList.toggle('active', t === tab);
+  });
+  // Lazy-load archive chip list on first open
+  if (tab === 'arsip' && !archiveChipsBuilt) buildArchiveChips();
+}
+
+/* ════════════════════════════════════════════════
+   ARCHIVE CONFIG
+   ──────────────────────────────────────────────
+   Ganti ARCHIVE_SHEET_ID dengan Sheet ID spreadsheet
+   yang berisi tab-tab Arsip_YYYY_MM.
+   (Biasanya sama dengan spreadsheet logbook utama)
+════════════════════════════════════════════════ */
+const ARCHIVE_SHEET_ID = '16PDjsICmnpuJyUyZBmvs7kuBzNKi17ItWKjdu_bPhQw'; // ← ganti jika beda
+
+// Daftar sheet arsip yang tersedia — urutan terbaru di atas.
+// Format nama harus sama persis dengan nama tab di Google Sheets.
+const ARCHIVE_SHEETS = [
+  { label: 'April 2026',     year: 2026, month: 4,  sheetName: 'Arsip_2026_04' },
+  { label: 'Maret 2026',     year: 2026, month: 3,  sheetName: 'Arsip_2026_03' },
+  { label: 'Februari 2026',  year: 2026, month: 2,  sheetName: 'Arsip_2026_02' },
+  { label: 'Januari 2026',   year: 2026, month: 1,  sheetName: 'Arsip_2026_01' },
+  { label: 'Desember 2025',  year: 2025, month: 12, sheetName: 'Arsip_2025_12' },
+  { label: 'November 2025',  year: 2025, month: 11, sheetName: 'Arsip_2025_11' },
+  { label: 'Oktober 2025',   year: 2025, month: 10, sheetName: 'Arsip_2025_10' },
+  { label: 'September 2025', year: 2025, month: 9,  sheetName: 'Arsip_2025_09' },
+];
+
+/* ── Archive state ── */
+let archiveChipsBuilt  = false;
+let currentArchiveSheet = null; // { label, sheetName, … }
+let archiveRawRows     = [];
+let archiveFiltered    = [];
+let archiveKeys        = [];
+let archivePage        = 1;
+const archivePageSize  = 50;
+
+/* ── Build archive chip list ── */
+function buildArchiveChips() {
+  archiveChipsBuilt = true;
+  const wrap = document.getElementById('archiveChips');
+  if (!ARCHIVE_SHEETS.length) {
+    wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">Tidak ada arsip yang dikonfigurasi.</span>';
+    return;
+  }
+
+  // Group by year
+  const byYear = {};
+  ARCHIVE_SHEETS.forEach(s => {
+    if (!byYear[s.year]) byYear[s.year] = [];
+    byYear[s.year].push(s);
+  });
+
+  let html = '';
+  for (const [year, sheets] of Object.entries(byYear).sort((a,b)=>b[0]-a[0])) {
+    html += `<div style="width:100%;margin-top:6px;margin-bottom:2px">
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted2)">${year}</span>
+    </div>`;
+    sheets.forEach(s => {
+      html += `<button class="archive-chip" id="chip-${s.sheetName}"
+        onclick="loadArchiveSheet('${s.sheetName}')">
+        📁 ${s.label}
+        <span class="chip-year">${s.year}</span>
+      </button>`;
+    });
+  }
+  wrap.innerHTML = html;
+}
+
+/* ── Load archive sheet via gviz ── */
+async function loadArchiveSheet(sheetName) {
+  // Visual: select chip
+  document.querySelectorAll('.archive-chip').forEach(c => c.classList.remove('selected'));
+  const chip = document.getElementById('chip-' + sheetName);
+  if (chip) chip.classList.add('selected');
+
+  const meta = ARCHIVE_SHEETS.find(s => s.sheetName === sheetName);
+  currentArchiveSheet = meta || { sheetName, label: sheetName };
+
+  // Show UI elements
+  ['archiveFilterRow','archiveBanner','archiveStatusBar','archiveTableCard'].forEach(id => {
+    document.getElementById(id).style.display = '';
+  });
+
+  setArchiveStatus('Memuat arsip ' + currentArchiveSheet.label + '…', 'loading');
+  archiveRawRows = [];
+  archiveFiltered = [];
+  archivePage = 1;
+
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${ARCHIVE_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
+    const res  = await fetch(url);
+    const text = await res.text();
+    const json = JSON.parse(text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);?\s*$/)[1]);
+    if (json.status !== 'ok') throw new Error(json.errors?.[0]?.message || 'Sheet error');
+
+    archiveRawRows = parseArchiveGviz(json.table);
+    archiveKeys    = archiveRawRows.length ? Object.keys(archiveRawRows[0]) : [];
+
+    populateArchiveCabangDropdown();
+    applyArchiveFilter();
+    setArchiveStatus(`✓ ${archiveRawRows.length} baris dimuat dari ${currentArchiveSheet.label}`, 'ok');
+    toast(`Arsip ${currentArchiveSheet.label}: ${archiveRawRows.length} baris`, 'ok');
+
+    // Update tab badge
+    document.getElementById('tabBadgeArsip').textContent = archiveRawRows.length;
+
+  } catch(e) {
+    setArchiveStatus('Gagal memuat: ' + e.message, 'err');
+    toast('Gagal memuat arsip: ' + e.message, 'err');
+    document.getElementById('archiveTbody').innerHTML = `<tr><td colspan="20">
+      <div class="empty-state"><div class="empty-icon">⚠️</div>
+        <p>Gagal memuat arsip</p>
+        <small>${e.message}<br>Pastikan nama sheet benar dan Sheet sudah dibagikan (Anyone with link - Viewer)</small>
+      </div></td></tr>`;
+  }
+}
+
+/* ── Parse gviz for archive ── */
+function parseArchiveGviz(table) {
+  const cols = table.cols.map(c => c.label.trim());
+  const rows = [];
+  for (const row of (table.rows || [])) {
+    const r = {};
+    cols.forEach((col, i) => {
+      const cell = row.c[i];
+      r[col] = (cell && cell.v !== null && cell.v !== undefined)
+        ? (cell.f !== undefined && cell.f !== null ? cell.f.toString().trim() : cell.v.toString().trim())
+        : '';
+    });
+    if (cols.every(k => !r[k])) continue; // skip fully empty
+    rows.push(r);
+  }
+  return rows;
+}
+
+/* ── Archive cabang dropdown ── */
+function populateArchiveCabangDropdown() {
+  const sel = document.getElementById('archiveCabang');
+  const cur = sel.value;
+  const set = new Set();
+  archiveRawRows.forEach(r => {
+    for (const k of Object.keys(r)) {
+      if (k.toLowerCase().includes('cabang')) { if (r[k]) set.add(r[k].toString().trim()); break; }
+    }
+  });
+  sel.innerHTML = '<option value="">Semua Cabang</option>';
+  Array.from(set).sort().forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    if (c === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+/* ── Archive filter ── */
+function applyArchiveFilter() {
+  const cabang = document.getElementById('archiveCabang').value.trim();
+  const dari   = document.getElementById('archiveTglDari').value;
+  const sampai = document.getElementById('archiveTglSampai').value;
+
+  archiveFiltered = archiveRawRows.filter(r => {
+    // Cabang filter
+    if (cabang) {
+      let rowCab = '';
+      for (const k of Object.keys(r)) { if (k.toLowerCase().includes('cabang')) { rowCab = r[k] || ''; break; } }
+      if (rowCab.trim().toLowerCase() !== cabang.toLowerCase()) return false;
+    }
+    // Date filter
+    if (dari || sampai) {
+      let dateVal = null;
+      for (const k of Object.keys(r)) {
+        if (k.toLowerCase() === 'tanggal' || k.toLowerCase().includes('tgl')) { dateVal = r[k]; break; }
+      }
+      if (dateVal) {
+        const d = parseDateFlexibleClient(dateVal);
+        if (d && !isNaN(d.getTime())) {
+          const ts = d.getTime();
+          if (dari) {
+            const [yy,mm,dd] = dari.split('-').map(Number);
+            if (ts < new Date(yy,mm-1,dd).getTime()) return false;
+          }
+          if (sampai) {
+            const [yy,mm,dd] = sampai.split('-').map(Number);
+            if (ts > new Date(yy,mm-1,dd,23,59,59).getTime()) return false;
+          }
+        }
+      }
+    }
+    return true;
+  });
+
+  archivePage = 1;
+  renderArchiveTable();
+
+  // Update banner
+  document.getElementById('archiveBanner').style.display = '';
+  document.getElementById('archiveBannerLabel').textContent = currentArchiveSheet ? currentArchiveSheet.label : '—';
+  document.getElementById('archiveBannerCount').textContent = archiveFiltered.length + ' baris' +
+    (archiveFiltered.length < archiveRawRows.length ? ` (filter dari ${archiveRawRows.length})` : '');
+  document.getElementById('archiveRowBadge').textContent = archiveFiltered.length + ' baris';
+
+  // Active filter chips
+  renderArchiveChips(cabang, dari, sampai);
+}
+
+function resetArchiveFilter() {
+  document.getElementById('archiveCabang').value = '';
+  document.getElementById('archiveTglDari').value = '';
+  document.getElementById('archiveTglSampai').value = '';
+  applyArchiveFilter();
+}
+
+function renderArchiveChips(cabang, dari, sampai) {
+  const wrap = document.getElementById('archiveActiveFiltersWrap');
+  const chips = [];
+  if (cabang) chips.push(`🏢 ${cabang}`);
+  if (dari)   chips.push(`📅 ${dari}`);
+  if (sampai) chips.push(`📅 s/d ${sampai}`);
+  wrap.innerHTML = chips.map(c => `
+    <span style="display:inline-flex;align-items:center;gap:4px;background:#f5f3ff;
+      color:#7c3aed;border:1px solid #ddd6fe;border-radius:20px;
+      padding:3px 10px;font-size:11px;font-weight:600">${c}</span>`).join('');
+}
+
+/* ── Render archive table ── */
+function renderArchiveTable() {
+  const thead = document.getElementById('archiveThead');
+  const tbody = document.getElementById('archiveTbody');
+  thead.innerHTML = ''; tbody.innerHTML = '';
+
+  const data = archiveFiltered.length ? archiveFiltered : archiveRawRows;
+  if (!data || data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="20">
+      <div class="empty-state"><div class="empty-icon">🔍</div>
+        <p>Tidak ada data</p><small>Coba ubah filter</small>
+      </div></td></tr>`;
+    document.getElementById('archivePagination').style.display = 'none';
+    return;
+  }
+
+  const keys = archiveKeys.length ? archiveKeys : Object.keys(data[0]);
+
+  // Header
+  const trh = document.createElement('tr');
+  keys.forEach(k => { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); });
+  thead.appendChild(trh);
+
+  // Pagination
+  const total      = data.length;
+  const totalPages = Math.max(1, Math.ceil(total / archivePageSize));
+  if (archivePage < 1) archivePage = 1;
+  if (archivePage > totalPages) archivePage = totalPages;
+  const start = (archivePage - 1) * archivePageSize;
+  const slice = data.slice(start, start + archivePageSize);
+
+  for (const r of slice) {
+    const tr = document.createElement('tr');
+    for (const k of keys) {
+      const td = document.createElement('td');
+      let v = r[k];
+      v = formatIfDate(k, v);
+      const kl = k.toLowerCase();
+      if (kl.includes('driver') || kl.includes('nama')) td.className = 'cell-primary';
+      else if (kl.includes('plat') || kl.includes('kode') || kl.includes('nomor')) td.className = 'cell-mono';
+      td.textContent = (v === null || v === undefined) ? '' : v;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  // Pagination controls
+  const showPag = totalPages > 1;
+  document.getElementById('archivePagination').style.display = showPag ? 'flex' : 'none';
+  document.getElementById('archiveTotalPages').textContent = String(totalPages);
+  document.getElementById('archiveCurrPage').textContent   = String(archivePage);
+  document.getElementById('archiveInputPage').value        = String(archivePage);
+  document.getElementById('archivePageSize').textContent   = String(archivePageSize);
+  document.getElementById('archivePrevPage').disabled = archivePage <= 1;
+  document.getElementById('archiveNextPage').disabled = archivePage >= totalPages;
+}
+
+/* ── Archive status ── */
+function setArchiveStatus(msg, state='idle') {
+  document.getElementById('archiveStatus').textContent = msg;
+  const dot = document.getElementById('archiveStatusDot');
+  dot.className = 'status-dot' + (state==='loading' ? ' loading' : state==='ok' ? ' ok' : state==='err' ? ' err' : '');
+}
+
+/* ── Export archive to Excel ── */
+function exportArchiveExcel() {
+  const data = archiveFiltered.length ? archiveFiltered : archiveRawRows;
+  if (!data || data.length === 0) { toast('Tidak ada data untuk diexport', 'err'); return; }
+  const keys  = archiveKeys.length ? archiveKeys : Object.keys(data[0]);
+  const sheet = [keys];
+  data.forEach(r => {
+    const line = [];
+    keys.forEach(k => { let v = r[k]; v = formatIfDate(k, v); line.push(v ?? ''); });
+    sheet.push(line);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(sheet);
+  ws['!cols'] = keys.map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new();
+  const sheetLabel = currentArchiveSheet ? currentArchiveSheet.label.replace(/ /g,'_') : 'Arsip';
+  XLSX.utils.book_append_sheet(wb, ws, sheetLabel.substring(0,31));
+  XLSX.writeFile(wb, `logbook_arsip_${sheetLabel}.xlsx`);
+  toast(`${data.length} baris arsip berhasil diekspor`, 'ok');
+}
+
+/* ── Archive pagination events ── */
+document.getElementById('archivePrevPage').addEventListener('click', () => {
+  archivePage = Math.max(1, archivePage - 1); renderArchiveTable();
+});
+document.getElementById('archiveNextPage').addEventListener('click', () => {
+  const data = archiveFiltered.length ? archiveFiltered : archiveRawRows;
+  archivePage = Math.min(Math.ceil(data.length / archivePageSize), archivePage + 1);
+  renderArchiveTable();
+});
+document.getElementById('archiveInputPage').addEventListener('change', e => {
+  const data = archiveFiltered.length ? archiveFiltered : archiveRawRows;
+  const tp   = Math.max(1, Math.ceil(data.length / archivePageSize));
+  let v = Number(e.target.value) || 1;
+  archivePage = Math.max(1, Math.min(tp, v));
+  renderArchiveTable();
+});
+
+/* ── Update Inspeksi tab badge when data loads ── */
+const _origApplyFiltersAndRender = applyFiltersAndRender;
+
 /* ── INIT ── */
-loadAll();
+// Update inspeksi badge after load
+const _origLoadAll = loadAll;
+async function loadAllAndUpdateBadge() {
+  await loadAll();
+  document.getElementById("tabBadgeInspeksi").textContent = rawRows.length;
+}
+loadAllAndUpdateBadge();
 </script>
 </body>
 </html>
