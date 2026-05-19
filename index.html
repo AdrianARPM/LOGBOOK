@@ -1678,7 +1678,7 @@ function renderArchiveTable() {
   const tbody = document.getElementById('archiveTbody');
   thead.innerHTML = ''; tbody.innerHTML = '';
 
-  const data = archiveFiltered.length ? archiveFiltered : archiveRawRows;
+  const data = (archiveFiltered.length || archiveFilterApplied) ? archiveFiltered : archiveRawRows; // Add this flag at top of applyArchiveFilter(): let archiveFilterApplied = false; function applyArchiveFilter() { archiveFilterApplied = true; ... } // Reset in resetArchiveFilter(): archiveFilterApplied = false;
   if (!data || data.length === 0) {
     tbody.innerHTML = `<tr><td colspan="20">
       <div class="empty-state"><div class="empty-icon">🔍</div>
