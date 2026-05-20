@@ -1408,89 +1408,65 @@ function switchTab(tab) {
 /* ════════════════════════════════════════════════
    ARCHIVE CONFIG
    ──────────────────────────────────────────────
-   Sheet ID spreadsheet yang berisi tab-tab Arsip_YYYY_MM.
-   Daftar sheet diambil OTOMATIS dari Apps Script —
-   tidak perlu update manual setiap bulan.
+   Ganti ARCHIVE_SHEET_ID dengan Sheet ID spreadsheet
+   yang berisi tab-tab Arsip_YYYY_MM.
+   (Biasanya sama dengan spreadsheet logbook utama)
 ════════════════════════════════════════════════ */
-const ARCHIVE_SHEET_ID = '18xYk8YNd19n04qDsE5mmxjLPcEr3Ayh6z0F5IAD_144';
+const ARCHIVE_SHEET_ID = '18xYk8YNd19n04qDsE5mmxjLPcEr3Ayh6z0F5IAD_144'; // ← ganti jika beda
+
+// Daftar sheet arsip yang tersedia — urutan terbaru di atas.
+// Format nama harus sama persis dengan nama tab di Google Sheets.
+const ARCHIVE_SHEETS = [
+  { label: 'Mei 2026',       year: 2026, month: 5,  sheetName: 'Arsip_2026_05' },
+  { label: 'April 2026',     year: 2026, month: 4,  sheetName: 'Arsip_2026_04' },
+  { label: 'Maret 2026',     year: 2026, month: 3,  sheetName: 'Arsip_2026_03' },
+  { label: 'Februari 2026',  year: 2026, month: 2,  sheetName: 'Arsip_2026_02' },
+  { label: 'Januari 2026',   year: 2026, month: 1,  sheetName: 'Arsip_2026_01' },
+  { label: 'Desember 2025',  year: 2025, month: 12, sheetName: 'Arsip_2025_12' },
+  { label: 'November 2025',  year: 2025, month: 11, sheetName: 'Arsip_2025_11' },
+  { label: 'Oktober 2025',   year: 2025, month: 10, sheetName: 'Arsip_2025_10' },
+  { label: 'September 2025', year: 2025, month: 9,  sheetName: 'Arsip_2025_09' },
+];
 
 /* ── Archive state ── */
-let archiveChipsBuilt   = false;
-let archiveSheetsList   = [];   // diisi otomatis dari Apps Script
+let archiveChipsBuilt  = false;
 let currentArchiveSheet = null; // { label, sheetName, … }
-let archiveRawRows      = [];
-let archiveFiltered     = [];
-let archiveFilterApplied = false;
-let archiveKeys         = [];
-let archivePage         = 1;
-const archivePageSize   = 50;
+let archiveRawRows     = [];
+let archiveFiltered    = [];
+let archiveKeys        = [];
+let archivePage        = 1;
+const archivePageSize  = 50;
 
-/* ── Nama bulan Indonesia ── */
-const BULAN_ID = ['','Januari','Februari','Maret','April','Mei','Juni',
-                  'Juli','Agustus','September','Oktober','November','Desember'];
-
-/* ── Build archive chip list (otomatis dari Apps Script) ── */
-async function buildArchiveChips() {
+/* ── Build archive chip list ── */
+function buildArchiveChips() {
   archiveChipsBuilt = true;
   const wrap = document.getElementById('archiveChips');
-  wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">⏳ Memuat daftar arsip…</span>';
-
-  try {
-    // Ambil daftar sheet dari Apps Script
-    const res = await fetchApi({ action: 'getArchiveSheets' });
-    const rawNames = (res.data || []);
-
-    if (!rawNames.length) {
-      wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">Tidak ada sheet arsip ditemukan. Pastikan nama tab diawali "Arsip_".</span>';
-      return;
-    }
-
-    // Parse nama sheet: Arsip_YYYY_MM → { label, year, month, sheetName }
-    archiveSheetsList = rawNames
-      .map(name => {
-        const m = name.match(/Arsip_(\d{4})_(\d{2})/i);
-        if (!m) return null;
-        const year = +m[1], month = +m[2];
-        return { label: `${BULAN_ID[month] || 'Bulan '+month} ${year}`, year, month, sheetName: name };
-      })
-      .filter(Boolean)
-      // Urutkan terbaru di atas: tahun turun, bulan turun
-      .sort((a, b) => b.year - a.year || b.month - a.month);
-
-    if (!archiveSheetsList.length) {
-      wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">Tidak ada sheet arsip dengan format Arsip_YYYY_MM.</span>';
-      return;
-    }
-
-    // Kelompokkan per tahun
-    const byYear = {};
-    archiveSheetsList.forEach(s => {
-      if (!byYear[s.year]) byYear[s.year] = [];
-      byYear[s.year].push(s);
-    });
-
-    let html = '';
-    for (const [year, sheets] of Object.entries(byYear).sort((a, b) => b[0] - a[0])) {
-      html += `<div style="width:100%;margin-top:6px;margin-bottom:2px">
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted2)">${year}</span>
-      </div>`;
-      sheets.forEach(s => {
-        html += `<button class="archive-chip" id="chip-${s.sheetName}"
-          onclick="loadArchiveSheet('${s.sheetName}')">
-          📁 ${s.label}
-          <span class="chip-year">${s.year}</span>
-        </button>`;
-      });
-    }
-    wrap.innerHTML = html;
-
-    // Update badge tab dengan jumlah total sheet arsip
-    document.getElementById('tabBadgeArsip').textContent = archiveSheetsList.length + ' sheet';
-
-  } catch(e) {
-    wrap.innerHTML = `<span style="color:var(--red);font-size:13px">⚠️ Gagal memuat daftar arsip: ${e.message}</span>`;
-    console.error('buildArchiveChips error:', e);
+  if (!ARCHIVE_SHEETS.length) {
+    wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">Tidak ada arsip yang dikonfigurasi.</span>';
+    return;
   }
+
+  // Group by year
+  const byYear = {};
+  ARCHIVE_SHEETS.forEach(s => {
+    if (!byYear[s.year]) byYear[s.year] = [];
+    byYear[s.year].push(s);
+  });
+
+  let html = '';
+  for (const [year, sheets] of Object.entries(byYear).sort((a,b)=>b[0]-a[0])) {
+    html += `<div style="width:100%;margin-top:6px;margin-bottom:2px">
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted2)">${year}</span>
+    </div>`;
+    sheets.forEach(s => {
+      html += `<button class="archive-chip" id="chip-${s.sheetName}"
+        onclick="loadArchiveSheet('${s.sheetName}')">
+        📁 ${s.label}
+        <span class="chip-year">${s.year}</span>
+      </button>`;
+    });
+  }
+  wrap.innerHTML = html;
 }
 
 /* ── Load archive sheet via gviz ── */
@@ -1500,7 +1476,7 @@ async function loadArchiveSheet(sheetName) {
   const chip = document.getElementById('chip-' + sheetName);
   if (chip) chip.classList.add('selected');
 
-  const meta = archiveSheetsList.find(s => s.sheetName === sheetName);
+  const meta = ARCHIVE_SHEETS.find(s => s.sheetName === sheetName);
   currentArchiveSheet = meta || { sheetName, label: sheetName };
 
   // Show UI elements
@@ -1629,7 +1605,6 @@ function populateArchiveCabangDropdown() {
 
 /* ── Archive filter ── */
 function applyArchiveFilter() {
-  archiveFilterApplied = true;
   const cabang = document.getElementById('archiveCabang').value.trim();
   const dari   = document.getElementById('archiveTglDari').value;
   const sampai = document.getElementById('archiveTglSampai').value;
@@ -1680,7 +1655,6 @@ function applyArchiveFilter() {
 }
 
 function resetArchiveFilter() {
-  archiveFilterApplied = false;
   document.getElementById('archiveCabang').value = '';
   document.getElementById('archiveTglDari').value = '';
   document.getElementById('archiveTglSampai').value = '';
@@ -1705,7 +1679,7 @@ function renderArchiveTable() {
   const tbody = document.getElementById('archiveTbody');
   thead.innerHTML = ''; tbody.innerHTML = '';
 
-  const data = (archiveFiltered.length || archiveFilterApplied) ? archiveFiltered : archiveRawRows;
+  const data = (archiveFiltered.length || archiveFilterApplied) ? archiveFiltered : archiveRawRows; // Add this flag at top of applyArchiveFilter(): let archiveFilterApplied = false; function applyArchiveFilter() { archiveFilterApplied = true; ... } // Reset in resetArchiveFilter(): archiveFilterApplied = false;
   if (!data || data.length === 0) {
     tbody.innerHTML = `<tr><td colspan="20">
       <div class="empty-state"><div class="empty-icon">🔍</div>
@@ -1788,12 +1762,12 @@ document.getElementById('archivePrevPage').addEventListener('click', () => {
   archivePage = Math.max(1, archivePage - 1); renderArchiveTable();
 });
 document.getElementById('archiveNextPage').addEventListener('click', () => {
-  const data = (archiveFiltered.length || archiveFilterApplied) ? archiveFiltered : archiveRawRows;
+  const data = archiveFiltered.length ? archiveFiltered : archiveRawRows;
   archivePage = Math.min(Math.ceil(data.length / archivePageSize), archivePage + 1);
   renderArchiveTable();
 });
 document.getElementById('archiveInputPage').addEventListener('change', e => {
-  const data = (archiveFiltered.length || archiveFilterApplied) ? archiveFiltered : archiveRawRows;
+  const data = archiveFiltered.length ? archiveFiltered : archiveRawRows;
   const tp   = Math.max(1, Math.ceil(data.length / archivePageSize));
   let v = Number(e.target.value) || 1;
   archivePage = Math.max(1, Math.min(tp, v));
