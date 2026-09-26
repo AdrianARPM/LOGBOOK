@@ -600,6 +600,10 @@ tbody tr:hover td { background: rgba(13,148,136,.03); }
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Export Excel
       </button>
+      <button class="btn btn-primary" id="btnExportBiayaAktif" title="Rekap total Bensin, Parkir, Bongkar, Tol per plat untuk data yang sedang tampil">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Export Biaya per Plat
+      </button>
     </div>
   </div>
 
@@ -839,6 +843,10 @@ tbody tr:hover td { background: rgba(13,148,136,.03); }
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Export Excel
           </button>
+          <button class="btn-purple btn-sm btn" onclick="exportBiayaArchive()" title="Rekap total Bensin, Parkir, Bongkar, Tol per plat untuk arsip ini">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            Export Biaya per Plat
+          </button>
         </div>
       </div>
       <div class="table-scroll">
@@ -885,6 +893,7 @@ const API_KEY = "KEY-2025";
 let rawRows     = [];
 let filteredRows = [];
 let driverCabangMap = {};
+let driverRoster = []; // roster lengkap dari sheet Users (action getDrivers)
 let currentKeys = [];
 let currentPage = 1;
 const pageSize  = 50;
@@ -999,9 +1008,20 @@ function formatIfDate(key, value) {
   return value;
 }
 
+/* ── ROSTER DRIVER (dari sheet Users) ── */
+async function loadDriverRoster() {
+  try {
+    const res = await fetchApi({ action: 'getDrivers' });
+    if (res && res.success && Array.isArray(res.data)) {
+      driverRoster = res.data;
+      buildDriverCabangMap(rawRows);   // merge cabang roster
+      populateCabangDropdowns();       // dropdown cabang ikut roster
+    }
+  } catch (e) { /* roster opsional; abaikan bila gagal */ }
+}
+
 /* ── CABANG MAP ── */
-function buildDriverCabangMap(rows) {
-  driverCabangMap = {};
+function buildDriverCabangMap(rows) {  driverCabangMap = {};
   if (!rows || !rows.length) return;
   const keys = Object.keys(rows[0] || {});
   let driverKey = null, cabangKey = null;
@@ -1018,6 +1038,13 @@ function buildDriverCabangMap(rows) {
     if (!dv && dv !== 0) continue;
     driverCabangMap[normalizeName(dv)] = (cab || '').toString().trim();
   }
+  // Gabungkan roster dari sheet Users supaya driver yang BELUM pernah mengisi
+  // pun punya cabang (tanpa menimpa data dari baris inspeksi yang sudah ada).
+  (driverRoster || []).forEach(function(d){
+    const key = normalizeName(d.nama || '');
+    if (!key) return;
+    if (!driverCabangMap[key]) driverCabangMap[key] = (d.cabang || '').toString().trim();
+  });
 }
 
 /* ── POPULATE DROPDOWNS ── */
@@ -1033,6 +1060,11 @@ function populateCabangDropdowns() {
     const t = (cabVal || '').toString().trim();
     if (t) set.add(t);
   }
+  // Sertakan cabang dari roster (agar cabang driver yang belum mengisi ikut muncul)
+  (driverRoster || []).forEach(function(d){
+    const t = (d.cabang || '').toString().trim();
+    if (t) set.add(t);
+  });
   const arr = Array.from(set).sort((a,b) => a.localeCompare(b, undefined, {sensitivity:'base'}));
 
   // Both dropdowns
@@ -1302,6 +1334,103 @@ function downloadMissingLastNDaysExcel(n, resultObj) {
   toast(`Missing data diekspor (${data.length-1} driver)`, 'ok');
 }
 
+/* ── REKAP BIAYA PER PLAT ──
+   Menjumlahkan Bensin, Parkir, Bongkar, Biaya Tol per plat kendaraan
+   dari data yang sedang tampil (ikut filter tanggal/cabang yang aktif). */
+
+// Parse angka rupiah dari sheet: "20000", "20.000", "20,000", 20000 -> 20000.
+function _num(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = parseInt(String(v).replace(/[^\d-]/g, ''), 10);
+  return isNaN(n) ? 0 : n;
+}
+
+// Cari nilai kolom berdasarkan beberapa kemungkinan nama header (tahan variasi).
+function _pick(row, candidates) {
+  const keys = Object.keys(row);
+  for (const cand of candidates) {
+    const cl = cand.toLowerCase();
+    for (const k of keys) {
+      if (String(k).trim().toLowerCase() === cl) return row[k];
+    }
+  }
+  return '';
+}
+
+// Bangun AoA rekap biaya per plat + baris TOTAL. periodeLabel untuk header info.
+function _buildBiayaRecapAoA(rows, periodeLabel) {
+  const F = {
+    plat:   ['Nomor Polisi','NomorPolisi','Plat','Plat Nomor','No Polisi'],
+    cabang: ['Cabang'],
+    bensin: ['Bensin'],
+    parkir: ['Parkir'],
+    bongkar:['Bongkar','Buruh Bongkar'],
+    tol:    ['Biaya Tol','Tol']
+  };
+  const map = {}; // plat -> agregat
+  rows.forEach(r => {
+    const plat = String(_pick(r, F.plat) || '').trim();
+    if (!plat) return;
+    if (!map[plat]) {
+      map[plat] = { plat: plat, cabang: String(_pick(r, F.cabang) || '').trim(),
+        entri: 0, bensin: 0, parkir: 0, bongkar: 0, tol: 0 };
+    }
+    const m = map[plat];
+    m.entri  += 1;
+    m.bensin += _num(_pick(r, F.bensin));
+    m.parkir += _num(_pick(r, F.parkir));
+    m.bongkar+= _num(_pick(r, F.bongkar));
+    m.tol    += _num(_pick(r, F.tol));
+    if (!m.cabang) m.cabang = String(_pick(r, F.cabang) || '').trim();
+  });
+
+  const list = Object.values(map).sort((a,b) => a.plat.localeCompare(b.plat));
+  const header = ['Nomor Polisi','Cabang','Jumlah Entri','Bensin','Parkir','Bongkar','Biaya Tol','Total'];
+  const aoa = [
+    ['Rekap Biaya per Plat — Periode: ' + (periodeLabel || '-')],
+    [],
+    header
+  ];
+  const grand = { entri:0, bensin:0, parkir:0, bongkar:0, tol:0, total:0 };
+  list.forEach(m => {
+    const total = m.bensin + m.parkir + m.bongkar + m.tol;
+    aoa.push([m.plat, m.cabang, m.entri, m.bensin, m.parkir, m.bongkar, m.tol, total]);
+    grand.entri += m.entri; grand.bensin += m.bensin; grand.parkir += m.parkir;
+    grand.bongkar += m.bongkar; grand.tol += m.tol; grand.total += total;
+  });
+  aoa.push(['TOTAL','', grand.entri, grand.bensin, grand.parkir, grand.bongkar, grand.tol, grand.total]);
+  return { aoa: aoa, jumlahPlat: list.length };
+}
+
+function _writeBiayaWorkbook(rows, periodeLabel, filenameLabel) {
+  if (!rows || rows.length === 0) { toast('Tidak ada data untuk direkap', 'err'); return; }
+  const res = _buildBiayaRecapAoA(rows, periodeLabel);
+  if (res.jumlahPlat === 0) { toast('Tidak ada plat pada data ini', 'err'); return; }
+  const ws = XLSX.utils.aoa_to_sheet(res.aoa);
+  ws['!cols'] = [{wch:16},{wch:16},{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:16}];
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }]; // gabung judul
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Rekap Biaya');
+  const safe = String(filenameLabel || 'periode').replace(/[^\w.-]+/g, '_');
+  XLSX.writeFile(wb, `rekap_biaya_per_plat_${safe}.xlsx`);
+  toast(`Rekap biaya ${res.jumlahPlat} plat berhasil diekspor`, 'ok');
+}
+
+// Tab Inspeksi Aktif
+function exportBiayaAktif() {
+  const data = (typeof filteredRows !== 'undefined' && filteredRows.length) ? filteredRows : rawRows;
+  const today = new Date();
+  const label = `aktif_${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  _writeBiayaWorkbook(data, 'Inspeksi Aktif (' + today.toLocaleDateString('id-ID') + ')', label);
+}
+
+// Tab Arsip
+function exportBiayaArchive() {
+  const data = (typeof archiveFiltered !== 'undefined' && archiveFiltered.length) ? archiveFiltered : archiveRawRows;
+  const label = currentArchiveSheet ? currentArchiveSheet.label : 'Arsip';
+  _writeBiayaWorkbook(data, label, label.replace(/ /g,'_'));
+}
+
 /* ── EXPORT LOGBOOK ── */
 function exportLogbookToExcel() {
   const data = filteredRows.length ? filteredRows : rawRows;
@@ -1351,6 +1480,7 @@ document.getElementById('btnApplyFilter').addEventListener('click', () => {
 document.getElementById('btnResetFilter').addEventListener('click', resetFilter);
 document.getElementById('filterPlat').addEventListener('keyup', e => { if (e.key === 'Enter') loadAll(); });
 document.getElementById('btnExportLogbookExcel').addEventListener('click', exportLogbookToExcel);
+document.getElementById('btnExportBiayaAktif').addEventListener('click', exportBiayaAktif);
 
 // Missing
 document.getElementById('btnMissingLastNDays').addEventListener('click', async () => {
@@ -1787,6 +1917,7 @@ const _origLoadAll = loadAll;
 async function loadAllAndUpdateBadge() {
   await loadAll();
   document.getElementById("tabBadgeInspeksi").textContent = rawRows.length;
+  loadDriverRoster(); // ambil roster driver (sheet Users) untuk deteksi belum-mengisi
 }
 loadAllAndUpdateBadge();
 </script>
